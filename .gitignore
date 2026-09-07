@@ -1,6 +1,11 @@
 .venv/
 scripts/.venv/
-.data/
+# Must stay `.data/*`, not `.data/`: git cannot re-include a file whose parent
+# directory is excluded, and the negation below would silently stop working.
+# project_aliases.json is config, not churn -- it is the only persistence for
+# cross-project memory sharing, so a truncation burst must leave it restorable.
+.data/*
+!.data/project_aliases.json
 logs/
 __pycache__/
 *.pyc
