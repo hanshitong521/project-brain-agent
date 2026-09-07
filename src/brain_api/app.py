@@ -14,6 +14,9 @@ from brain_services.context_builder import ContextBuilder
 from brain_services.knowledge_service import KnowledgeService
 from brain_services.memory_simple import DATA_DIR as MEMORY_DATA_DIR
 from brain_services.memory_simple import get_memory_backend
+from brain_services.project_alias import resolve as resolve_alias
+from brain_services.project_alias import save as save_aliases
+from brain_services.project_alias import status as alias_status
 from brain_services.project_context import FIXTURES_ROOT, ProjectContextService
 from brain_services.stats_filter import filter_events_for_dashboard, filter_memory_projects
 from brain_services.stats_store import (
@@ -135,6 +138,21 @@ def _resolve_allowed_path(raw_path: str) -> Path:
     raise HTTPException(403, "path not allowed")
 
 
+def _pid(project_id: str) -> str:
+    """Memory-pool key for an id reported by an agent or picked in the dashboard."""
+    return resolve_alias(project_id)
+
+
+def _pid_opt(project_id: str | None) -> str | None:
+    """Optional filter. Empty must stay empty: it means 全部, and resolving it
+    would silently narrow the dashboard to the single default project."""
+    return resolve_alias(project_id) if (project_id or "").strip() else None
+
+
+class AliasesBody(BaseModel):
+    aliases: dict[str, str] = Field(default_factory=dict)
+
+
 @app.get("/")
 def root_redirect():
     return RedirectResponse(url="/dashboard", status_code=302)
@@ -232,7 +250,7 @@ def api_mcp_seed_demo(body: McpSeedBody | None = None) -> dict:
 
 @app.get("/v1/stats/dashboard")
 def stats_dashboard(project_id: str | None = Query(default=None)) -> dict:
-    return build_dashboard_payload(project_id=project_id or None)
+    return build_dashboard_payload(project_id=_pid_opt(project_id))
 
 
 @app.get("/v1/stats/events")
@@ -263,9 +281,10 @@ def stats_savings(
     events = load_all_events()
     if len(events) > 5000:
         events = events[:5000]
+    pid = _pid_opt(project_id)
     ledger = context_build_ledger(
         events,
-        project_id=project_id or None,
+        project_id=pid,
         hit_filter=hit_filter,
         date_from=date_from or None,
         date_to=date_to or None,
@@ -273,7 +292,7 @@ def stats_savings(
     )
     ret_ledger = retrieval_ledger(
         events,
-        project_id=project_id or None,
+        project_id=pid,
         hit_filter=hit_filter,
         date_from=date_from or None,
         date_to=date_to or None,
@@ -282,7 +301,8 @@ def stats_savings(
     build_series = aggregate_savings(ledger, period)
     ret_series = aggregate_retrieval(ret_ledger, period)
     return {
-        "filter_project_id": project_id,
+        "filter_project_id": pid,
+        "requested_project_id": project_id,
         "period": period,
         "hit_filter": hit_filter,
         "date_from": date_from,
@@ -298,7 +318,7 @@ def stats_savings(
 
 @app.get("/v1/stats/stream")
 async def stats_stream(project_id: str | None = Query(default=None)) -> StreamingResponse:
-    pid = project_id or None
+    pid = _pid_opt(project_id)
 
     async def generate():
         while True:
@@ -324,43 +344,72 @@ def open_local_path(path: str = Query(..., min_length=1)) -> RedirectResponse:
 
 @app.get("/v1/projects")
 def list_projects(tracked_only: bool = Query(default=True)) -> dict:
-    if tracked_only:
-        return {"project_ids": _projects.list_tracked_project_ids()}
-    return {"project_ids": _projects.list_fixture_project_ids()}
+    ids = (
+        _projects.list_tracked_project_ids()
+        if tracked_only
+        else _projects.list_fixture_project_ids()
+    )
+    st = alias_status()
+    return {
+        "project_ids": ids,
+        "aliases": st["aliases"],
+        "alias_groups": st["groups"],
+        "canonical_ids": [i for i in ids if i not in st["aliases"]],
+    }
+
+
+@app.get("/v1/aliases")
+def get_aliases() -> dict:
+    """Effective alias map, plus stored/env split so the page can show which
+    entries came from BRAIN_PROJECT_ALIASES and which the file owns."""
+    return alias_status()
+
+
+@app.put("/v1/aliases")
+def put_aliases(body: AliasesBody) -> dict:
+    save_aliases(body.aliases)
+    return {"ok": True, **alias_status()}
 
 
 @app.get("/v1/projects/{project_id}")
 def get_project(project_id: str) -> dict:
+    pid = _pid(project_id)
     try:
-        return _projects.search(project_id, "")
+        out = _projects.search(pid, "")
     except KeyError:
         raise HTTPException(404, "unknown project") from None
+    return {"requested_project_id": project_id, **out}
 
 
 @app.get("/v1/projects/{project_id}/rules")
 def get_rules(project_id: str) -> dict:
+    pid = _pid(project_id)
     try:
-        return {"project_id": project_id, "rules": _projects.list_rules(project_id)}
+        rules = _projects.list_rules(pid)
     except KeyError:
         raise HTTPException(404, "unknown project") from None
+    return {"project_id": pid, "requested_project_id": project_id, "rules": rules}
 
 
 @app.put("/v1/projects/{project_id}/rules")
 def put_rules(project_id: str, body: RulesBody) -> dict:
+    pid = _pid(project_id)
     try:
-        _projects.save_rules(project_id, body.rules)
-        return {"ok": True, "project_id": project_id, "rules": body.rules}
+        _projects.save_rules(pid, body.rules)
     except KeyError:
         raise HTTPException(404, "unknown project") from None
+    return {"ok": True, "project_id": pid, "requested_project_id": project_id, "rules": body.rules}
 
 
 @app.post("/v1/context/build")
 def build_context(body: BuildContextBody) -> dict:
+    pid = _pid(body.project_id)
     try:
-        out = _ctx.build_task_context(body.project_id, body.task, body.budget_tokens)
-        return {k: v for k, v in out.items() if k != "context"}
+        out = _ctx.build_task_context(pid, body.task, body.budget_tokens)
     except KeyError:
         raise HTTPException(404, "unknown project") from None
+    out = {k: v for k, v in out.items() if k != "context"}
+    return {"requested_project_id": body.project_id, **out}
 
 
 @app.get("/v1/memory/{project_id}/dedupe-preview")
@@ -368,7 +417,8 @@ def memory_dedupe_preview(project_id: str) -> dict:
     preview_fn = getattr(_memory, "dedupe_preview", None)
     if not callable(preview_fn):
         raise HTTPException(501, "dedupe-preview 需要离线 JSONL 模式")
-    return {"project_id": project_id, **preview_fn(project_id)}
+    pid = _pid(project_id)
+    return {"project_id": pid, "requested_project_id": project_id, **preview_fn(pid)}
 
 
 @app.post("/v1/memory/{project_id}/dedupe")
@@ -376,7 +426,8 @@ def memory_dedupe(project_id: str) -> dict:
     dedupe_fn = getattr(_memory, "dedupe_file", None)
     if not callable(dedupe_fn):
         raise HTTPException(501, "dedupe 需要离线 JSONL 模式")
-    return {"project_id": project_id, **dedupe_fn(project_id)}
+    pid = _pid(project_id)
+    return {"project_id": pid, "requested_project_id": project_id, **dedupe_fn(pid)}
 
 
 @app.post("/v1/memory/{project_id}/backfill-titles")
@@ -384,7 +435,8 @@ def memory_backfill_titles(project_id: str) -> dict:
     backfill_fn = getattr(_memory, "backfill_titles", None)
     if not callable(backfill_fn):
         raise HTTPException(501, "backfill-titles 需要离线 JSONL 模式")
-    return {"project_id": project_id, **backfill_fn(project_id)}
+    pid = _pid(project_id)
+    return {"project_id": pid, "requested_project_id": project_id, **backfill_fn(pid)}
 
 
 @app.get("/v1/stats/retrieval")
@@ -393,15 +445,17 @@ def stats_retrieval(
     limit: int = Query(default=100, le=300),
 ) -> dict:
     """Phoenix RETRIEVER-style ledger for MCP search/get_change_context."""
+    pid = _pid_opt(project_id)
     events = [
         e
         for e in load_events(800)
         if e.get("event_type") == "context_retrieval"
-        and (not project_id or e.get("project_id") == project_id)
+        and (not pid or e.get("project_id") == pid)
     ][:limit]
     hit = sum(1 for e in events if (e.get("metrics") or {}).get("any_hit"))
     return {
-        "filter_project_id": project_id,
+        "filter_project_id": pid,
+        "requested_project_id": project_id,
         "count": len(events),
         "hit_count": hit,
         "hit_rate": round(100 * hit / len(events), 1) if events else 0.0,
@@ -417,7 +471,12 @@ def memory_list(project_id: str, limit: int = 200) -> dict:
             501,
             "memory list 需要离线 JSONL 模式（勿设 BRAIN_USE_MEM0=1）；请重启看板 API",
         )
-    return {"project_id": project_id, "items": list_fn(project_id, limit=limit)}
+    pid = _pid(project_id)
+    return {
+        "project_id": pid,
+        "requested_project_id": project_id,
+        "items": list_fn(pid, limit=limit),
+    }
 
 
 @app.delete("/v1/memory/{project_id}/{memory_id}")
@@ -425,30 +484,33 @@ def memory_delete(project_id: str, memory_id: str) -> dict:
     delete_fn = getattr(_memory, "delete_by_id", None)
     if not callable(delete_fn):
         raise HTTPException(501, "memory delete 需要离线 JSONL 模式")
-    if not delete_fn(project_id, memory_id):
+    pid = _pid(project_id)
+    if not delete_fn(pid, memory_id):
         raise HTTPException(404, "memory not found")
-    return {"ok": True, "id": memory_id}
+    return {"ok": True, "id": memory_id, "project_id": pid}
 
 
 @app.post("/v1/memory/search")
 def memory_search(project_id: str, query: str, limit: int = 5) -> dict:
-    results = _memory.search(project_id, query, limit=min(limit, 5))
+    pid = _pid(project_id)
+    results = _memory.search(pid, query, limit=min(limit, 5))
     record_event(
         "memory_search",
-        project_id=project_id,
+        project_id=pid,
         detail=query[:200],
         metrics={"hit_count": len(results), "limit": limit},
         source="api",
     )
-    return {"results": results}
+    return {"project_id": pid, "requested_project_id": project_id, "results": results}
 
 
 @app.post("/v1/knowledge/search")
 def knowledge_search(project_id: str, query: str, top_k: int = 5) -> dict:
-    results = _knowledge.search(project_id, query, top_k=top_k)
+    pid = _pid(project_id)
+    results = _knowledge.search(pid, query, top_k=top_k)
     record_event(
         "knowledge_search",
-        project_id=project_id,
+        project_id=pid,
         detail=query[:200],
         metrics={
             "hit_count": len(results),
@@ -459,7 +521,7 @@ def knowledge_search(project_id: str, query: str, top_k: int = 5) -> dict:
         },
         source="api",
     )
-    return {"results": results}
+    return {"project_id": pid, "requested_project_id": project_id, "results": results}
 
 
 def main() -> None:

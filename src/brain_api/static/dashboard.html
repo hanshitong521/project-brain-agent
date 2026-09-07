@@ -778,6 +778,41 @@
     </section>
 
     <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>项目别名 · 记忆共享</h2>
+          <div class="desc">同一项目的多个工作目录共用一个记忆池 · <span class="mono">.data/project_aliases.json</span></div>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="ghost" id="aliasRefresh">刷新</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="aliasWarn" class="warn" style="display:none;margin-bottom:0.85rem"></div>
+        <div class="table-wrap" style="max-height:none">
+          <table>
+            <thead>
+              <tr><th>规范项目（记忆池）</th><th>别名工作目录</th><th>来源</th><th>操作</th></tr>
+            </thead>
+            <tbody id="aliasTable"></tbody>
+          </table>
+        </div>
+        <div class="field-inline" style="margin-top:0.85rem;flex-wrap:wrap;gap:0.5rem">
+          <span>新增别名</span>
+          <input type="text" id="aliasSrc" placeholder="工作目录名，如 shejiuTest" />
+          <span>→</span>
+          <input type="text" id="aliasDst" placeholder="规范项目，如 shejiuPro" />
+          <button type="button" id="aliasAdd">保存</button>
+        </div>
+        <p class="hint" style="font-size:0.72rem;color:var(--muted);margin:0.65rem 0 0">
+          别名只决定记忆 / Rules / 统计落到哪个池，不改变代码检索——Brain 是 WHY 层，代码定位走 ContextMind。
+          链式别名自动展平（<span class="mono">a→b</span>、<span class="mono">b→c</span> 存成 <span class="mono">a→c</span>），避免两个 agent 落在不同池。
+          环境变量 <span class="mono">BRAIN_PROJECT_ALIASES</span> 优先级更高，与文件冲突时会在上表标注。
+        </p>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panel-head"><div><h2>项目 Rules</h2><div class="desc">fixtures/*/project.yaml</div></div></div>
       <div class="panel-body">
         <div class="field-inline" style="margin-bottom:0.5rem">
@@ -830,6 +865,12 @@
     let streamEs = null;
     let filterProject = new URLSearchParams(location.search).get("project_id") || "";
     let rulesProjectId = "";
+    // aliasStored is the file-only map; aliasMap additionally carries env
+    // entries. They are kept apart so saving never bakes an env override into
+    // the file and hides the conflict it represents.
+    let aliasMap = {};
+    let aliasGroups = {};
+    let aliasStored = {};
     let savingsPeriod = "day";
     let savingsHitFilter = "all";
     let savingsDateFrom = "";
@@ -938,16 +979,33 @@
 
     const periodLabel = { hour: "时", day: "日", week: "周", month: "月", year: "年" };
 
+    function isAliasId(id) {
+      return Object.prototype.hasOwnProperty.call(aliasMap, id);
+    }
+
+    function projectLabel(id) {
+      const al = aliasGroups[id];
+      return al && al.length ? `${id}（含 ${al.join("、")}）` : id;
+    }
+
+    function aliasTag(id) {
+      const al = aliasGroups[id];
+      if (!al || !al.length) return "";
+      return ` <span class="tag" title="这些工作目录共用同一个记忆池">${escapeHtml(al.join("、"))}</span>`;
+    }
+
     function collectProjectIds(data) {
       const fromApi = data.available_project_ids || [];
       const fromMem = (data.memory_by_project || []).map((p) => p.project_id);
-      return [...new Set([...fromApi, ...fromMem].filter(Boolean))].sort();
+      return [...new Set([...fromApi, ...fromMem].filter(Boolean))]
+        .filter((id) => !isAliasId(id))
+        .sort();
     }
 
     function syncSelectOptions(selectEl, ids, allowAll) {
       const current = selectEl.id === "projectFilter" ? filterProject : rulesProjectId;
       const opts = (allowAll ? ['<option value="">全部</option>'] : []).concat(
-        ids.map((id) => `<option value="${id}"${id === current ? " selected" : ""}>${id}</option>`)
+        ids.map((id) => `<option value="${escapeHtml(id)}"${id === current ? " selected" : ""}>${escapeHtml(projectLabel(id))}</option>`)
       );
       if (!ids.length && !allowAll) {
         selectEl.innerHTML = '<option value="">（无项目）</option>';
@@ -1042,7 +1100,7 @@
           ? `<span class="dedupe-badge">${rem} 条</span>`
           : `<span class="dedupe-badge ok">0</span>`;
         return `<tr>
-        <td>${escapeHtml(r.project_id)}</td>
+        <td>${escapeHtml(r.project_id)}${aliasTag(r.project_id)}</td>
         <td>${r.memory_count}</td>
         <td>${dedupeCell}</td>
         <td class="mono">${r.file_abs ? fileLink(r.file_abs) : escapeHtml(r.file)}</td>
@@ -1477,6 +1535,129 @@
       }
     });
 
+    function renderAliasPanel(st, loadError) {
+      const warn = document.getElementById("aliasWarn");
+      const tb = document.getElementById("aliasTable");
+      const msgs = [];
+      if (loadError) msgs.push(`读取别名失败：${loadError}`);
+      if (st && st.error) msgs.push(st.error);
+      if (st && (st.env_overrides || []).length) {
+        msgs.push(`${st.env_var} 覆盖了文件里的 ${st.env_overrides.join("、")}，实际以环境变量为准`);
+      }
+      if (msgs.length) {
+        warn.style.display = "block";
+        warn.textContent = msgs.join(" · ");
+      } else {
+        warn.style.display = "none";
+        warn.textContent = "";
+      }
+
+      if (!st) { tb.innerHTML = "<tr><td colspan='4'>—</td></tr>"; return; }
+      const rows = [];
+      for (const canonical of Object.keys(st.groups || {}).sort()) {
+        for (const alias of st.groups[canonical]) {
+          const inEnv = Object.prototype.hasOwnProperty.call(st.env || {}, alias);
+          const inFile = Object.prototype.hasOwnProperty.call(st.stored || {}, alias);
+          const overridden = (st.env_overrides || []).includes(alias);
+          const src = overridden
+            ? '<span class="tag">env 覆盖文件</span>'
+            : inEnv ? '<span class="tag">env</span>'
+            : inFile ? '<span class="tag">文件</span>' : "<span class='tag'>—</span>";
+          const act = inFile
+            ? `<button type="button" class="ghost alias-del" data-src="${escapeHtml(alias)}">删除</button>`
+            : `<span class="hint" style="font-size:0.72rem;color:var(--muted)">改 ${escapeHtml(st.env_var || "env")}</span>`;
+          rows.push(`<tr>
+            <td class="mono">${escapeHtml(canonical)}</td>
+            <td class="mono">${escapeHtml(alias)}</td>
+            <td>${src}</td>
+            <td>${act}</td></tr>`);
+        }
+      }
+      tb.innerHTML = rows.length
+        ? rows.join("")
+        : "<tr><td colspan='4'>暂无别名 · 每个工作目录各自一个记忆池，互不可见</td></tr>";
+    }
+
+    async function loadAliases() {
+      let st = null;
+      try {
+        const r = await fetch("/v1/aliases");
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        st = await r.json();
+      } catch (e) {
+        renderAliasPanel(null, String(e));
+        return;
+      }
+      aliasMap = st.aliases || {};
+      aliasGroups = st.groups || {};
+      aliasStored = st.stored || {};
+      // ?project_id=shejiuTest names an alias but the dropdown only offers
+      // canonical pools; left as-is the select would not match and the filter
+      // would silently fall back to 全部.
+      const canon = aliasMap[filterProject];
+      if (canon && canon !== filterProject) {
+        filterProject = canon;
+        const url = new URL(location.href);
+        url.searchParams.set("project_id", filterProject);
+        history.replaceState(null, "", url);
+      }
+      renderAliasPanel(st, null);
+    }
+
+    async function putAliases(next) {
+      try {
+        const r = await fetch("/v1/aliases", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ aliases: next }),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          showToast(`保存失败 HTTP ${r.status} ${d.detail || ""}`.trim(), "warn");
+          return false;
+        }
+        const st = await r.json();
+        aliasMap = st.aliases || {};
+        aliasGroups = st.groups || {};
+        aliasStored = st.stored || {};
+        renderAliasPanel(st, st.error || null);
+        showToast("别名已保存 · MCP 与看板立即生效，无需重启");
+        pollOnce().catch(() => {});
+        return true;
+      } catch (e) {
+        showToast(`保存失败：${e}`, "warn");
+        return false;
+      }
+    }
+
+    document.getElementById("aliasAdd").addEventListener("click", async () => {
+      const srcEl = document.getElementById("aliasSrc");
+      const dstEl = document.getElementById("aliasDst");
+      const src = srcEl.value.trim();
+      const dst = dstEl.value.trim();
+      if (!src || !dst) { showToast("别名和规范项目都要填", "warn"); return; }
+      if (src === dst) { showToast("别名不能指向自己", "warn"); return; }
+      const hop = aliasMap[dst];
+      if (hop && hop !== dst) {
+        showToast(`${dst} 本身是 ${hop} 的别名，请直接指向 ${hop}`, "warn");
+        return;
+      }
+      if (await putAliases({ ...aliasStored, [src]: dst })) {
+        srcEl.value = "";
+        dstEl.value = "";
+      }
+    });
+
+    document.getElementById("aliasTable").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".alias-del");
+      if (!btn) return;
+      const next = { ...aliasStored };
+      delete next[btn.dataset.src];
+      await putAliases(next);
+    });
+
+    document.getElementById("aliasRefresh").addEventListener("click", () => loadAliases());
+
     function applyData(data) {
       renderSummary(data);
       renderMemory(data.memory_by_project || [], data.summary);
@@ -1529,9 +1710,6 @@
       pollOnce().catch(() => {});
     });
 
-    if (typeof EventSource !== "undefined") connectStream();
-    else poll();
-
     initDateFilters();
 
     (function initMemoryAutoDedupe() {
@@ -1543,13 +1721,18 @@
       });
     })();
 
+    // Aliases first: they decide which ids are pools and which are just other
+    // names for one, so drawing before this would list both in the dropdowns.
     (async () => {
+      await loadAliases();
+      if (typeof EventSource !== "undefined") connectStream();
+      else poll();
       try {
         const r = await fetch("/v1/projects");
         if (!r.ok) return;
-        const ids = (await r.json()).project_ids || [];
+        const ids = ((await r.json()).canonical_ids || []).slice().sort();
         if (ids.length) {
-          syncSelectOptions(document.getElementById("rulesProject"), ids.sort(), false);
+          syncSelectOptions(document.getElementById("rulesProject"), ids, false);
           if (!rulesProjectId) await loadRules(ids[0]);
         }
       } catch (_) {}
