@@ -1,0 +1,11 @@
+project:
+  name: shejiuPro
+  language: java
+  framework: spring-boot
+  repo_root: E:/workA/shejiuPro
+
+rules:
+  - RequirementMind FROZEN decisions override Brain memory on conflict.
+  - Java structure: ContextMind context_orient (once per FQCN) + context_fetch; not Brain.
+  - Pits and ADS口径: search_project_context / get_change_context before risky edits.
+  - Gate READY后同步: node scripts/sync-requirementmind-brain.mjs (shejiuPro repo).

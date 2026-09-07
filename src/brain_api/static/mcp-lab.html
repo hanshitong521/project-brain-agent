@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP 实验室 · Project Brain</title>
+<style>
+	:root {
+		--bg0: #070b12; --bg1: #0c1220; --surface: rgba(22, 30, 48, 0.92);
+		--surface2: #0f1624; --border: rgba(148, 163, 184, 0.16);
+		--text: #f1f5f9; --muted: #94a3b8;
+		--accent: #60a5fa; --accent-dim: rgba(96, 165, 250, 0.14);
+		--green: #34d399; --red: #f87171; --yellow: #fbbf24; --radius: 12px;
+		--mono: ui-monospace, Consolas, monospace;
+	}
+	*, *::before, *::after { box-sizing: border-box; }
+	body {
+		margin: 0;
+		background: linear-gradient(180deg, var(--bg0), var(--bg1));
+		color: var(--text);
+		font: 14px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+		min-height: 100vh;
+	}
+	header.app-bar {
+		display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+		gap: 12px 16px; padding: 14px 24px;
+		background: rgba(7, 11, 18, 0.92); border-bottom: 1px solid var(--border);
+	}
+	header.app-bar h1 { font-size: 1.25rem; font-weight: 650; line-height: 1.3; }
+	header.app-bar .sub { color: var(--muted); font-size: 12px; font-family: var(--mono); margin-top: 4px; word-break: break-all; }
+	.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+	.nav a {
+		color: var(--accent); text-decoration: none; font-size: 13px;
+		padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+		background: var(--accent-dim); white-space: nowrap;
+	}
+	.nav a.active { font-weight: 600; border-color: rgba(96, 165, 250, 0.55); }
+	main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; }
+	.panel {
+		background: var(--surface); border: 1px solid var(--border);
+		border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
+	}
+	.panel-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+	.alert { padding: 12px 14px; border-radius: var(--radius); margin-bottom: 14px; border: 1px solid var(--border); }
+	.alert.warn { border-color: var(--yellow); color: var(--yellow); }
+	.alert.err { border-color: var(--red); color: var(--red); }
+	.alert.ok { border-color: var(--green); color: var(--green); font-size: 13px; }
+	.btn {
+		display: inline-flex; align-items: center; justify-content: center;
+		padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+		background: var(--accent-dim); color: var(--accent); cursor: pointer;
+		font: inherit; font-size: 13px; line-height: 1.2; white-space: nowrap;
+	}
+	.btn:hover { border-color: rgba(96, 165, 250, 0.45); }
+	.btn-ghost { background: transparent; color: var(--muted); }
+	.btn-danger { color: var(--red); background: rgba(248, 113, 113, 0.08); }
+	.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	select, .field-input {
+		padding: 7px 10px; border-radius: 8px; background: var(--surface2);
+		color: var(--text); border: 1px solid var(--border); font: inherit; font-size: 13px;
+	}
+	select { min-width: 0; max-width: 100%; }
+	textarea.field-input { width: 100%; resize: vertical; font-family: var(--mono); font-size: 12px; }
+	.inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	.inline-form .field-input { flex: 1 1 220px; min-width: 0; }
+	.panel-head {
+		display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start;
+		gap: 14px; margin-bottom: 14px;
+	}
+	.panel-head h2 { font-size: 15px; font-weight: 600; margin: 0; }
+	.panel-head .desc { font-size: 12px; color: var(--muted); margin-top: 4px; }
+	.stats-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+	.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+	.seg .btn { border-radius: 999px; padding: 5px 12px; font-size: 12px; margin: 0; }
+	.seg .btn.active { color: var(--accent); border-color: rgba(96, 165, 250, 0.5); background: var(--accent-dim); }
+	.date-range-bar {
+		display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+		margin-bottom: 16px; font-size: 12px; color: var(--muted);
+	}
+	.date-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+	.date-preset {
+		padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border);
+		background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px;
+	}
+	.date-preset.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(96, 165, 250, 0.45); }
+	.date-field {
+		display: inline-flex; align-items: center; gap: 6px;
+		padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2);
+	}
+	.date-field input[type="date"] {
+		border: none; background: transparent; color: var(--text); font-size: 12px; color-scheme: dark;
+	}
+	.stat-row {
+		display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+		gap: 10px; margin-bottom: 16px;
+	}
+	.stat-tile {
+		background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+		padding: 12px 14px; min-height: 76px; display: flex; flex-direction: column;
+	}
+	.stat-tile .label { font-size: 11px; color: var(--muted); letter-spacing: 0.03em; }
+	.stat-tile .num { font-size: 20px; font-weight: 650; margin-top: 6px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+	.stat-tile .sub { font-size: 11px; color: var(--muted); margin-top: auto; padding-top: 6px; min-height: 1.2em; }
+	.charts-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+	@media (max-width: 960px) { .charts-duo { grid-template-columns: 1fr; } }
+	.chart-panel {
+		background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+		padding: 14px; min-width: 0;
+	}
+	.chart-title { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+	.chart-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 2rem 1rem; }
+	.plot-scroll { overflow-x: auto; }
+	.plot {
+		display: grid; grid-auto-flow: column; grid-auto-columns: minmax(52px, 1fr);
+		gap: 10px; height: 220px; min-width: min-content; align-items: stretch;
+	}
+	.plot-col {
+		display: grid; grid-template-rows: 1.35rem 1fr 1.7rem; min-width: 48px; height: 100%;
+	}
+	.plot-val {
+		font-size: 10px; color: var(--muted); font-family: var(--mono);
+		text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	}
+	.plot-track {
+		display: flex; align-items: flex-end; justify-content: center;
+		border-bottom: 1px solid var(--border); padding: 0 4px; min-height: 0;
+	}
+	.plot-stack {
+		width: min(40px, 70%); height: var(--h, 8%); min-height: 4px;
+		display: flex; flex-direction: column-reverse; border-radius: 4px 4px 1px 1px; overflow: hidden;
+	}
+	.plot-stack span { display: block; width: 100%; min-height: 0; }
+	.plot-stack .ok { background: var(--green); }
+	.plot-stack .bad { background: var(--red); }
+	.plot-stack .mid { background: #64748b; }
+	.plot-x { font-size: 10px; color: var(--muted); text-align: center; padding-top: 4px; line-height: 1.2; word-break: break-all; }
+	.legend { font-size: 11px; color: var(--muted); margin-top: 10px; }
+	.legend span { margin-right: 12px; }
+	.data-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+	.data-table th, .data-table td {
+		padding: 8px 10px; border-bottom: 1px solid var(--border);
+		vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
+	}
+	.data-table th { color: var(--muted); font-weight: 500; font-size: 11px; text-align: left; }
+	.data-table th.num, .data-table td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+	.data-table td code { font-size: 11px; word-break: break-all; }
+	.hbar-list { display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
+	.hbar-row { display: grid; grid-template-columns: minmax(0, 140px) 1fr 40px; gap: 10px; align-items: center; font-size: 12px; }
+	.hbar-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.hbar-track { height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+	.hbar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #818cf8); border-radius: 4px; min-width: 2px; }
+	.hbar-val { text-align: right; font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+	.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+	@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+	.list-panel { max-height: 520px; overflow-y: auto; padding: 10px !important; }
+	.item {
+		display: block; width: 100%; text-align: left;
+		border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+		cursor: pointer; background: transparent; color: inherit; font: inherit;
+	}
+	.item:hover { border-color: rgba(96, 165, 250, 0.35); }
+	.item.sel { border-color: var(--accent); background: var(--accent-dim); }
+	.item-line2 { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+	.badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+	.badge.ok { background: rgba(52,211,153,.15); color: var(--green); }
+	.badge.bad { background: rgba(248,113,113,.15); color: var(--red); }
+	.badge.mid { background: #1e293b; color: var(--muted); }
+	.detail-panel label { display: block; font-size: 12px; color: var(--muted); margin-top: 10px; }
+	.detail-panel pre {
+		background: var(--surface2); padding: 10px; border-radius: 8px; font-size: 11px;
+		overflow: auto; max-height: 200px; margin-top: 6px;
+	}
+	.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+	.lesson { border-top: 1px solid var(--border); padding: 10px 0; font-size: 13px; }
+	.lesson:first-child { border-top: none; padding-top: 0; }
+</style>
+<script src="http://127.0.0.1:18888/hub-nav.js" defer></script>
+</head>
+<body>
+<header class="app-bar">
+	<div>
+		<h1>MCP 实验室</h1>
+		<div class="sub" id="meta">loading…</div>
+	</div>
+	<nav class="nav">
+		<a href="/dashboard">Project Brain 看板</a>
+		<a href="/mcp-lab" class="active">MCP 实验室</a>
+		<a href="#" id="nexmind-link" style="display:none">NexMind 内页</a>
+	</nav>
+</header>
+<main>
+	<div id="align" class="alert warn" style="display:none"></div>
+	<div id="err" class="alert err" style="display:none"></div>
+	<div id="seedMsg" class="alert ok" style="display:none"></div>
+
+	<section class="panel" id="stats-panel">
+		<div class="panel-head">
+			<div>
+				<h2>MCP 调用统计</h2>
+				<div class="desc">北京时间 · 时 / 日 / 周 / 月 / 年 · 按 MCP 服务与工作区项目</div>
+			</div>
+			<div class="stats-controls">
+				<div class="seg" id="statsPeriodSeg">
+					<button type="button" class="btn btn-ghost" data-period="hour">时</button>
+					<button type="button" class="btn btn-ghost active" data-period="day">日</button>
+					<button type="button" class="btn btn-ghost" data-period="week">周</button>
+					<button type="button" class="btn btn-ghost" data-period="month">月</button>
+					<button type="button" class="btn btn-ghost" data-period="year">年</button>
+				</div>
+				<select id="statsServer" title="MCP 服务"><option value="">全部 MCP 服务</option></select>
+				<select id="statsProject" title="工作区项目"><option value="">全部项目</option></select>
+				<button type="button" class="btn" id="statsRefresh">刷新统计</button>
+			</div>
+		</div>
+		<div class="date-range-bar">
+			<div class="date-presets" id="statsDatePresets">
+				<button type="button" class="date-preset" data-preset="today">今天</button>
+				<button type="button" class="date-preset" data-preset="7">近 7 天</button>
+				<button type="button" class="date-preset active" data-preset="30">近 30 天</button>
+				<button type="button" class="date-preset" data-preset="all">全部</button>
+			</div>
+			<span class="date-field"><span>从</span><input type="date" id="statsDateFrom" /></span>
+			<span>—</span>
+			<span class="date-field"><span>至</span><input type="date" id="statsDateTo" /></span>
+			<button type="button" class="btn btn-ghost" id="statsDateApply">应用</button>
+		</div>
+		<div class="stat-row" id="statsKpi"></div>
+		<div class="charts-duo">
+			<div class="chart-panel">
+				<div class="chart-title">时间序列 · 调用次数（成功 / 失败 / 取消）</div>
+				<div class="plot-scroll" id="statsSeriesChart"></div>
+				<div class="legend"><span style="color:var(--green)">■</span> 成功 <span style="color:var(--red)">■</span> 失败 <span style="color:#64748b">■</span> 取消</div>
+			</div>
+			<div class="chart-panel">
+				<div class="chart-title">MCP 服务 · 调用次数</div>
+				<div class="hbar-list" id="statsServerBars"></div>
+			</div>
+		</div>
+		<div class="charts-duo">
+			<div class="chart-panel">
+				<div class="chart-title">工作区项目 · 调用次数</div>
+				<div class="hbar-list" id="statsProjectBars"></div>
+			</div>
+			<div class="chart-panel">
+				<div class="chart-title">工具 Top（服务 / 工具名）</div>
+				<div style="max-height:240px;overflow:auto">
+					<table class="data-table" id="statsToolTable">
+						<colgroup>
+							<col style="width:28%"><col style="width:32%"><col style="width:13%"><col style="width:13%"><col style="width:14%">
+						</colgroup>
+						<thead><tr>
+							<th>服务</th><th>工具</th><th class="num">次数</th><th class="num">失败</th><th class="num">均耗时</th>
+						</tr></thead>
+						<tbody></tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-title">主项目目录对齐</div>
+		<div class="inline-form">
+			<input id="primary" class="field-input" placeholder="e:\workA\shejiuPro" />
+			<button type="button" class="btn" id="savePrimary">保存</button>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head" style="margin-bottom:10px">
+			<div class="panel-title" style="margin:0">调用明细</div>
+			<div class="toolbar">
+				<select id="filter">
+					<option value="all">全部</option>
+					<option value="errors">失败 / FAIL</option>
+					<option value="archived">已归档</option>
+				</select>
+				<button type="button" class="btn" id="refresh">刷新列表</button>
+				<button type="button" class="btn btn-ghost" id="compress">压缩教训</button>
+			</div>
+		</div>
+		<section class="panel" id="lessons-wrap" style="margin-bottom:12px;display:none;background:var(--surface2)">
+			<div class="panel-title">压缩教训</div>
+			<div id="lessons"></div>
+		</section>
+		<div class="grid-2">
+			<div class="panel list-panel" id="list"></div>
+			<div class="panel detail-panel" id="detail">
+				<p style="color:var(--muted);margin:0">从左侧选择一条 MCP 调用</p>
+			</div>
+		</div>
+	</section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let DATA = null;
+let selectedId = null;
+let statsPeriod = "day";
+let statsDateFrom = "";
+let statsDateTo = "";
+
+function fmtDate(d) {
+	const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+	return `${y}-${m}-${day}`;
+}
+
+function applyDatePreset(preset) {
+	const now = new Date();
+	if (preset === "all") {
+		statsDateFrom = ""; statsDateTo = "";
+		$("statsDateFrom").value = ""; $("statsDateTo").value = "";
+		loadStats(); return;
+	}
+	const end = fmtDate(now);
+	let start = end;
+	if (preset === "7") { const d = new Date(now); d.setDate(d.getDate() - 6); start = fmtDate(d); }
+	else if (preset === "30") { const d = new Date(now); d.setDate(d.getDate() - 29); start = fmtDate(d); }
+	statsDateFrom = start; statsDateTo = end;
+	$("statsDateFrom").value = start; $("statsDateTo").value = end;
+	loadStats();
+}
+
+function statsQuery() {
+	const p = new URLSearchParams({ period: statsPeriod });
+	if (statsDateFrom) p.set("date_from", statsDateFrom);
+	if (statsDateTo) p.set("date_to", statsDateTo);
+	const srv = $("statsServer").value; if (srv) p.set("mcp_server", srv);
+	const proj = $("statsProject").value; if (proj) p.set("project", proj);
+	return p;
+}
+
+function renderStatsKpi(s) {
+	const tiles = [
+		["总调用", s.total, `成功率 ${s.success_rate ?? 0}%`],
+		["成功", s.success, ""],
+		["失败", s.error, s.envelope_fail ? `信封 FAIL ${s.envelope_fail}` : ""],
+		["取消", s.cancelled, ""],
+		["MCP 服务", s.unique_servers, `工具 ${s.unique_tools ?? 0}`],
+		["工作区项目", s.unique_projects, `均耗时 ${s.avg_duration_ms ?? 0} ms`],
+	];
+	$("statsKpi").innerHTML = tiles.map(([label, num, sub]) =>
+		`<div class="stat-tile"><div class="label">${label}</div><div class="num">${num ?? 0}</div><div class="sub">${sub || "\u00a0"}</div></div>`
+	).join("");
+}
+
+function renderSeriesChart(series) {
+	const el = $("statsSeriesChart");
+	if (!series?.length) {
+		el.innerHTML = '<div class="chart-empty">该时间范围内暂无 MCP 调用记录<br><span style="font-size:12px">数据来自 .forgemind 日志与 .contextmind/telemetry.db；请实际调用 MCP 后刷新</span></div>';
+		return;
+	}
+	const maxN = Math.max(...series.map((b) => b.total || 0), 1);
+	el.innerHTML = `<div class="plot">${series.map((b) => {
+		const n = b.total || 0;
+		const ok = b.success || 0, bad = b.error || 0, mid = b.cancelled || 0;
+		const h = Math.max(n ? 4 : 0, Math.round(100 * n / maxN));
+		const label = b.period.length > 12 ? b.period.slice(5, 16) : b.period;
+		return `<div class="plot-col" title="${esc(b.period)}: ${n} 次">
+			<div class="plot-val">${n}</div>
+			<div class="plot-track"><div class="plot-stack" style="--h:${h}%">
+				<span class="mid" style="flex:${mid || 0}"></span>
+				<span class="bad" style="flex:${bad || 0}"></span>
+				<span class="ok" style="flex:${ok || 0}"></span>
+			</div></div>
+			<div class="plot-x">${esc(label)}</div></div>`;
+	}).join("")}</div>`;
+}
+
+function renderHBars(containerId, rows, labelKey) {
+	const el = $(containerId);
+	if (!rows?.length) { el.innerHTML = '<div class="chart-empty">无数据</div>'; return; }
+	const max = Math.max(...rows.map((r) => r.total || 0), 1);
+	el.innerHTML = rows.slice(0, 12).map((r) => {
+		const pct = Math.max(2, Math.round(100 * (r.total || 0) / max));
+		const label = r[labelKey] || "—";
+		return `<div class="hbar-row" title="${esc(label)}">
+			<div class="hbar-label">${esc(label)}</div>
+			<div class="hbar-track"><div class="hbar-fill" style="width:${pct}%"></div></div>
+			<div class="hbar-val">${r.total || 0}</div></div>`;
+	}).join("");
+}
+
+function renderToolTable(tools) {
+	const tb = $("statsToolTable").querySelector("tbody");
+	if (!tools?.length) {
+		tb.innerHTML = '<tr><td colspan="5" class="chart-empty" style="border:none">无数据</td></tr>';
+		return;
+	}
+	tb.innerHTML = tools.slice(0, 25).map((t) => `<tr>
+		<td>${esc(t.server)}</td><td><code>${esc(t.tool)}</code></td>
+		<td class="num">${t.total || 0}</td><td class="num">${t.error || 0}</td><td class="num">${t.avg_duration_ms || 0}</td>
+	</tr>`).join("");
+}
+
+function fillFilterOptions(opts) {
+	const srv = $("statsServer"), curS = srv.value;
+	srv.innerHTML = '<option value="">全部 MCP 服务</option>' +
+		(opts.servers || []).map((s) => `<option value="${escAttr(s)}">${esc(s)}</option>`).join("");
+	if ([...srv.options].some((o) => o.value === curS)) srv.value = curS;
+	const proj = $("statsProject"), curP = proj.value;
+	proj.innerHTML = '<option value="">全部项目</option>' +
+		(opts.projects || []).map((p) => `<option value="${escAttr(p)}">${esc(p)}</option>`).join("");
+	if ([...proj.options].some((o) => o.value === curP)) proj.value = curP;
+}
+
+async function loadStats() {
+	try {
+		const r = await fetch("/api/mcp-activity/stats?" + statsQuery());
+		if (!r.ok) throw new Error("stats HTTP " + r.status);
+		const data = await r.json();
+		fillFilterOptions(data.filter_options || {});
+		renderStatsKpi(data.summary || {});
+		renderSeriesChart(data.series || []);
+		renderHBars("statsServerBars", data.by_server || [], "server");
+		renderHBars("statsProjectBars", data.by_project || [], "project");
+		renderToolTable(data.by_tool || []);
+	} catch (e) { console.error("loadStats", e); }
+}
+
+document.getElementById("statsPeriodSeg").addEventListener("click", (e) => {
+	const btn = e.target.closest("[data-period]"); if (!btn) return;
+	statsPeriod = btn.dataset.period;
+	document.querySelectorAll("#statsPeriodSeg .btn").forEach((b) => b.classList.toggle("active", b === btn));
+	loadStats();
+});
+document.getElementById("statsDatePresets").addEventListener("click", (e) => {
+	const btn = e.target.closest(".date-preset"); if (!btn) return;
+	document.querySelectorAll("#statsDatePresets .date-preset").forEach((b) => b.classList.toggle("active", b === btn));
+	applyDatePreset(btn.dataset.preset);
+});
+$("statsDateApply").onclick = () => {
+	statsDateFrom = $("statsDateFrom").value;
+	statsDateTo = $("statsDateTo").value;
+	document.querySelectorAll("#statsDatePresets .date-preset").forEach((b) => b.classList.remove("active"));
+	loadStats();
+};
+$("statsRefresh").onclick = () => loadStats();
+$("statsServer").onchange = () => loadStats();
+$("statsProject").onchange = () => loadStats();
+
+function badge(e) {
+	const v = e.annotation?.verdict || e.auto_verdict || "";
+	if (v === "wrong" || v === "failed" || e.status === "error" || e.envelope_status === "FAIL")
+		return '<span class="badge bad">错误</span>';
+	if (v === "correct" || v === "helpful") return '<span class="badge ok">有效</span>';
+	if (v === "superseded") return '<span class="badge mid">已修复</span>';
+	return '<span class="badge mid">待判</span>';
+}
+
+function filtered() {
+	const f = $("filter").value;
+	const list = DATA?.entries ?? [];
+	if (f === "errors") return list.filter((e) => e.status === "error" || e.envelope_status === "FAIL" || e.annotation?.verdict === "wrong");
+	if (f === "archived") return list.filter((e) => e.annotation?.archived);
+	return list;
+}
+
+function renderList() {
+	const el = $("list");
+	const rows = filtered();
+	if (!rows.length) {
+		el.innerHTML = '<p style="color:var(--muted);margin:8px">暂无记录。在 Cursor/NexMind 调用 MCP 后刷新；列表会自动合并 ContextMind 遥测真实调用。</p>';
+		return;
+	}
+	el.innerHTML = rows.map((e) => `
+		<button type="button" class="item ${e.id === selectedId ? "sel" : ""}" data-id="${escAttr(e.id)}">
+			<div><strong>${esc(e.summary || e.tool_name)}</strong>${badge(e)}</div>
+			<div class="item-line2">${esc(e.at)} · ${e.duration_ms ?? 0} ms · ${esc(e.mcp_server_name)}</div>
+		</button>`).join("");
+	el.querySelectorAll(".item").forEach((btn) => btn.addEventListener("click", () => {
+		selectedId = btn.dataset.id;
+		renderList();
+		renderDetail();
+	}));
+}
+
+function renderDetail() {
+	const e = DATA?.entries?.find((x) => x.id === selectedId);
+	const el = $("detail");
+	if (!e) {
+		el.innerHTML = '<p style="color:var(--muted);margin:0">从左侧选择一条 MCP 调用</p>';
+		return;
+	}
+	el.innerHTML = `
+		<p style="margin:0 0 8px"><b>服务</b> ${esc(e.mcp_server_name)} · <b>工具</b> <code>${esc(e.tool_name)}</code></p>
+		<p style="margin:0 0 8px;font-size:13px;color:var(--muted)">状态 ${esc(e.status)}${e.envelope_status ? " · 信封 " + esc(e.envelope_status) : ""} · 可能有效 ${e.auto_effective ? "是" : "否"}</p>
+		${e.error ? `<p style="color:var(--red);margin:0 0 8px">${esc(e.error)}</p>` : ""}
+		${e.response_preview ? `<pre>${esc(e.response_preview)}</pre>` : ""}
+		<label>备注</label><textarea class="field-input" id="note" rows="2">${esc(e.annotation?.note || "")}</textarea>
+		<label>下次如何调整（写入压缩教训）</label><textarea class="field-input" id="adj" rows="2">${esc(e.annotation?.adjustment || "")}</textarea>
+		<div class="detail-actions">
+			<button type="button" class="btn" id="markOk">标记正确</button>
+			<button type="button" class="btn btn-danger" id="markBad">错误并归档</button>
+			<button type="button" class="btn btn-ghost" id="markNone">无作用</button>
+		</div>
+		<label>关联后续成功调用的 id</label>
+		<input class="field-input" id="fixId" placeholder="修复记录 id" />
+		<button type="button" class="btn" id="linkFix" style="margin-top:8px">关联修复</button>
+	`;
+	$("markOk").onclick = () => annotate({ verdict: "correct", resolved: true });
+	$("markBad").onclick = () => annotate({ verdict: "wrong", archived: true, resolved: false });
+	$("markNone").onclick = () => annotate({ verdict: "no_effect" });
+	$("linkFix").onclick = async () => {
+		const fix_id = $("fixId").value.trim();
+		if (!fix_id) return;
+		await post("/api/mcp-activity/link-fix", { wrong_id: e.id, fix_id, adjustment: $("adj").value || $("note").value });
+		await refreshAll();
+	};
+}
+
+async function annotate(patch) {
+	if (!selectedId) return;
+	await post("/api/mcp-activity/annotate", {
+		id: selectedId,
+		note: $("note")?.value,
+		adjustment: $("adj")?.value,
+		...patch,
+	});
+	await refreshAll();
+}
+
+function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+function escAttr(s) { return esc(s).replace(/'/g, "&#39;"); }
+
+async function post(path, body) {
+	const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
+	if (!r.ok) throw new Error(await r.text());
+	return r.json();
+}
+
+async function load() {
+	$("err").style.display = "none";
+	try {
+		const r = await fetch("/api/mcp-activity?limit=200");
+		if (!r.ok) throw new Error("HTTP " + r.status);
+		DATA = await r.json();
+		const a = DATA.alignment;
+		const src = DATA.data_source || "journal";
+		$("meta").textContent = `${a.workspaceCwd} · 数据源: ${src} (journal ${DATA.journal_real_lines ?? 0} + telemetry ${DATA.telemetry_rows ?? 0})`;
+		if (a.primaryProjectRoot) $("primary").value = a.primaryProjectRoot;
+		const align = $("align");
+		if (!a.aligned) {
+			align.style.display = "block";
+			align.textContent = "工作区未与主项目对齐。主项目: " + (a.primaryProjectRoot || "未解析") + " — " + (a.warnings?.join(" ") || "");
+		} else align.style.display = "none";
+		const lessons = DATA.compressed_lessons || [];
+		const lw = $("lessons-wrap");
+		if (lessons.length) {
+			lw.style.display = "block";
+			$("lessons").innerHTML = lessons.map((l) => `
+				<div class="lesson"><b>${esc(l.server)} / ${esc(l.tool)}</b> ×${l.wrong_count}
+				<div style="color:var(--muted);margin-top:4px">${esc(l.lesson)}</div>
+				${l.adjustment ? `<div style="color:var(--green);font-size:12px;margin-top:4px">调整: ${esc(l.adjustment)}</div>` : ""}</div>`).join("");
+		} else lw.style.display = "none";
+		if (!selectedId && DATA.entries[0]) selectedId = DATA.entries[0].id;
+		renderList();
+		renderDetail();
+	} catch (err) {
+		$("err").style.display = "block";
+		$("err").textContent = String(err);
+	}
+}
+
+async function refreshAll() {
+	await load();
+	await loadStats();
+}
+
+$("refresh").onclick = () => refreshAll();
+$("filter").onchange = () => renderList();
+$("compress").onclick = async () => { await post("/api/mcp-activity/compress", {}); await refreshAll(); };
+$("savePrimary").onclick = async () => {
+	await post("/api/mcp-activity/primary", { primaryProjectRoot: $("primary").value.trim() });
+	await refreshAll();
+};
+
+fetch("/api/nav").then((r) => r.json()).then((nav) => {
+	const el = $("nexmind-link");
+	if (nav.nexmind_mcp_lab_query && el) { el.style.display = ""; el.href = nav.nexmind_mcp_lab_query; }
+}).catch(() => {});
+
+applyDatePreset("30");
+refreshAll();
+setInterval(refreshAll, 20000);
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+project:
+  name: demo-spring-project
+  language: java
+  framework: spring-boot
+  database: h2
+
+rules:
+  - Refunds must be idempotent per orderId; use RefundService as single entry.
+  - Never expose internal refund state directly on public API DTOs.
+  - All monetary amounts use BigDecimal with scale 2.

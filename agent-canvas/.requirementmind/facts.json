@@ -1,0 +1,186 @@
+[
+  {
+    "id": "FACT-001",
+    "category": "doc",
+    "statement": "当前仓库自称 OpenHands frontend / Agent Canvas，不是 Agent Server 或 SDK。",
+    "source": { "type": "doc", "path": "AGENTS.md", "line": 3 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-002",
+    "category": "constraint",
+    "statement": "本仓库只允许改 UI、前端状态、以及如何调用已有后端接口；新 Agent/Tool/会话/服务端逻辑属于 OpenHands/software-agent-sdk。",
+    "source": { "type": "doc", "path": "AGENTS.md", "line": 47 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-003",
+    "category": "constraint",
+    "statement": "Agent-server REST 调用必须走 @openhands/typescript-client，禁止在 src 里用 axios/fetch 直打 /api/*。",
+    "source": { "type": "doc", "path": "AGENTS.md", "line": 351 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-004",
+    "category": "constraint",
+    "statement": "公开 Skills 来自 @openhands/extensions 构建期 SKILLS_CATALOG；用户/项目 skills 由 agent-server 拉取。",
+    "source": { "type": "doc", "path": "AGENTS.md", "line": 19 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-005",
+    "category": "stack",
+    "statement": "npm 包名为 @openhands/agent-canvas，当前 version 1.16.0，Node >=22.12.0。",
+    "source": { "type": "code", "path": "package.json", "line": 2 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-006",
+    "category": "stack",
+    "statement": "默认 Agent Server / Automation 版本针为 1.44.1 / 1.10.0，ingress 默认端口 8000，agent-server 18000。",
+    "source": { "type": "config", "path": "config/defaults.json", "line": 3 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-007",
+    "category": "structure",
+    "statement": "Agent Canvas 不执行 agent 动作、不提供沙箱、不在无 automation backend 时跑定时任务。",
+    "source": { "type": "doc", "path": "docs/architecture.md", "line": 14 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-008",
+    "category": "structure",
+    "statement": "SkillsService 合并本地 SkillsClient(getSkills load_public:false) 与构建期 PUBLIC_SKILLS。",
+    "source": { "type": "code", "path": "src/api/skills-service.ts", "line": 39 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-009",
+    "category": "constraint",
+    "statement": "CI 用 no-direct-agent-server-calls.test.ts 拦截 src 下 ad-hoc HTTP；仅 automation-service、cloud/proxy、main-app-auth 例外。",
+    "source": { "type": "test", "path": "src/api/no-direct-agent-server-calls.test.ts", "line": 7 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-010",
+    "category": "structure",
+    "statement": "仓库根目录无生产 docker-compose；仅 examples/acp-docker/docker-compose.yml。",
+    "source": { "type": "code", "path": "examples/acp-docker/docker-compose.yml", "line": 1 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-011",
+    "category": "structure",
+    "statement": "Downloads/11111 顶层仓库：joern-master、llama_index-main、mem0-main、qdrant-master、rewrite-main、ruff-main、scip-main、semgrep-develop、superpowers-main、SWE-agent-main、tree-sitter-master。其中没有 OpenHands / software-agent-sdk。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111", "line": 1 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-012",
+    "category": "doc",
+    "statement": "Mem0 定位为 AI Agent 长期记忆层；Python 包 mem0ai 2.0.20，依赖含 qdrant-client 与 sqlalchemy。",
+    "source": { "type": "code", "path": "C:/Users/Administrator/Downloads/11111/mem0-main/pyproject.toml", "line": 5 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-013",
+    "category": "doc",
+    "statement": "Qdrant 是向量数据库，本地可用 docker run -p 6333:6333 qdrant/qdrant。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/qdrant-master/README.md", "line": 47 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-014",
+    "category": "doc",
+    "statement": "LlamaIndex OSS 是 agentic/RAG 框架，核心包 llama-index-core，向量库通过集成包接入。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/llama_index-main/README.md", "line": 11 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-015",
+    "category": "doc",
+    "statement": "SCIP 是代码索引协议（定义/引用/实现），本仓库提供 schema 与 CLI，Java/TS 等 indexer 在独立仓库。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/scip-main/README.md", "line": 3 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-016",
+    "category": "doc",
+    "statement": "Joern 用 CPG 做跨语言静态分析与漏洞挖掘，要求 JDK 21。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/joern-master/README.md", "line": 9 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-017",
+    "category": "doc",
+    "statement": "Superpowers 是面向多种 coding agent 的 composable skills/方法论，不是可执行后端服务。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/superpowers-main/README.md", "line": 3 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-018",
+    "category": "doc",
+    "statement": "Semgrep 是静态规则扫描工具；社区版主要单函数/单文件，跨文件 SAST 需 AppSec Platform。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/semgrep-develop/README.md", "line": 45 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-019",
+    "category": "doc",
+    "statement": "SWE-agent 维护方建议改用 mini-swe-agent，原项目已非当前主力。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/SWE-agent-main/README.md", "line": 20 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-020",
+    "category": "doc",
+    "statement": "OpenRewrite (rewrite-main) 是自动重构引擎；Ruff 是 Python linter/formatter；tree-sitter 是增量解析库。三者均出现在 Downloads 中，但用户大纲正文未列为核心子项目。",
+    "source": { "type": "doc", "path": "C:/Users/Administrator/Downloads/11111/rewrite-main/README.md", "line": 22 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-021",
+    "category": "database",
+    "statement": "当前 Agent Canvas 仓库未扫描到 PostgreSQL schema、memories/skills 业务表或 Qdrant collection 定义。",
+    "source": { "type": "doc", "path": "docs/architecture.md", "line": 5 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-022",
+    "category": "api",
+    "statement": "当前仓库已有 MCP 前端配置与健康探测（McpService），没有 search_memory / load_skill / analyze_code 这类 Project Brain MCP 工具实现。",
+    "source": { "type": "code", "path": "src/api/mcp-health/probe-mcp-server-health.ts", "line": 1 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  },
+  {
+    "id": "FACT-023",
+    "category": "constraint",
+    "statement": "RequirementMind 硬规则：需求未过 Requirement Gate 不允许正式开发。",
+    "source": { "type": "doc", "path": ".cursor/skills/requirement-mind/SKILL.md", "line": 11 },
+    "confidence": 1.0,
+    "status": "VERIFIED"
+  }
+]

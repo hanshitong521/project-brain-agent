@@ -1,0 +1,8 @@
+project:
+  name: demo-python-crawler
+  language: python
+  framework: scrapy
+
+rules:
+  - Respect robots.txt unless explicitly overridden in project config.
+  - Store cookies in encrypted session store only.

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "Q-001",
+    "topic": "session_deliverable",
+    "question": "本轮 RequirementMind 通过 Gate 之后，立刻允许做什么？",
+    "reason": "直接决定现在是只出规格，还是规格后马上写业务代码；也裁决 CON-003。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 只产出开发规格与 agent-prompt，Gate 前不写业务代码",
+      "B. Gate 通过后在本对话立刻开始编码 MVP",
+      "C. 规格与编码并行：先写骨架仓库再补规格",
+      "D. 只要把大纲扩写成 PROJECT_BRAIN_AGENT_DEVELOPMENT_SPEC.md，不要 RequirementMind 其余阶段"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-002",
+    "topic": "code_home",
+    "question": "Project Brain 的代码应落在哪里？",
+    "reason": "当前工作区是 Agent Canvas，AGENTS.md 禁止在此实现 Agent/Memory 后端；不确认会写错仓库。裁决 CON-001。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 新建独立仓库 project-brain-agent（推荐边界清晰）",
+      "B. 就在当前 project-brain-mind / Agent Canvas 仓库里加服务（违反现有 AGENTS.md）",
+      "C. 作为 OpenHands/software-agent-sdk 的插件/tool 仓",
+      "D. 多仓：brain 服务独立仓 + Canvas 只加 MCP 配置 UI"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-003",
+    "topic": "runtime_host",
+    "question": "日常执行 Agent 的宿主是谁？",
+    "reason": "大纲同时画了 Cursor→MCP→Brain 和 OpenHands Agent Loop，二者工具协议、workspace、skill 加载路径不同。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 只服务 Cursor：Brain 是 MCP Server",
+      "B. 只服务 OpenHands Agent Server：Brain 是 tool/MCP 被 agent-server 调用",
+      "C. 同一 Brain MCP 同时给 Cursor 和 OpenHands 用",
+      "D. 先做 Cursor MCP，OpenHands 接入列为二期"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-004",
+    "topic": "openhands_source",
+    "question": "OpenHands 基座代码从哪来？",
+    "reason": "Downloads 无 SDK；本仓无 Agent Loop。不确认无法定义“禁止改核心”的具体文件边界。裁决 CON-002。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 只消费已发布 openhands-agent-server（uvx/Docker），不 vendor 源码",
+      "B. 另下一份 software-agent-sdk 源码，只允许 tools/ 插件",
+      "C. Fork Agent Server，允许改 loop（与大纲禁止项冲突）",
+      "D. v1 不绑定 OpenHands，先独立 MCP，二期再接"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-005",
+    "topic": "third_party_consume",
+    "question": "Downloads/11111 里的项目如何进入工程？",
+    "reason": "vendor 全量源码与 Docker/PyPI 消费，构建、许可证、升级路径完全不同。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 全部当参考，运行时只用官方 Docker/PyPI（不把源码拷进产品仓）",
+      "B. 需要改的组件 vendor 进产品仓，其余用镜像",
+      "C. 全部 vendor 进 monorepo 自行编译",
+      "D. 仅 Mem0+Qdrant 进 v1，其余仓库先不集成"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-006",
+    "topic": "v1_scope",
+    "question": "第一个可运行版本包含哪些子系统？",
+    "reason": "17 部分一次做完无法验收；必须冻结 v1 边界才能写开发顺序。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. v1 = Context + Memory(Mem0/Qdrant) + MCP + Token 预算 + 1 条 Agent 流程",
+      "B. v1 = A + Skill 加载（无 Evolution）",
+      "C. v1 = B + SCIP 代码索引 + Semgrep review",
+      "D. v1 按大纲 1–17 全部交付（含 Joern/Evolution/四业务验收）"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-007",
+    "topic": "memory_stack",
+    "question": "长期记忆以哪套为权威实现？",
+    "reason": "Mem0 已含 Qdrant+SQLAlchemy；再叠加自研 PG memories 表和 LlamaIndex RAG 会双写。裁决 CON-004。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. 权威 = Mem0 OSS（Qdrant 作其 vector store），PG 只存 Mem0 元数据，不用 LlamaIndex 做记忆",
+      "B. 自研 memory-service + PG + Qdrant，Mem0 不用",
+      "C. Mem0 管对话记忆，LlamaIndex 管文档/代码知识，禁止混写入同一 collection",
+      "D. 先只做 Qdrant 直连，Mem0 与 LlamaIndex 都不用"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-008",
+    "topic": "validation_targets",
+    "question": "第十六部分四个业务项目现在是否纳入 v1 验收？",
+    "reason": "扫描范围内没有淘宝采集/抖音百应/退款 Spring Boot/blender-mind 代码，无法定义可执行验收。",
+    "priority": "BLOCKING",
+    "options": [
+      "A. v1 不做四业务，只用合成 fixture 验收",
+      "B. 你下一批提供四项目绝对路径后再写验收用例",
+      "C. 四业务全部作为 v1 必过验收",
+      "D. 只选其中一个作为 v1 黄金路径（下一条消息写清路径）"
+    ],
+    "status": "ANSWERED"
+  },
+  {
+    "id": "Q-009",
+    "topic": "canvas_v1_changes",
+    "question": "v1 是否必须在 agent-canvas 仓库提交 MCP 配置 UI 代码？",
+    "reason": "DEC-002 允许 Canvas 作配置入口，但 v1 最小闭环可能仅通过 Cursor mcp.json 连接 Brain。",
+    "priority": "IMPORTANT",
+    "options": [
+      "A. v1 零改动 agent-canvas，只用 Cursor/OpenHands 侧 MCP 配置",
+      "B. v1 必须在 Canvas 增加 Brain MCP 连接设置页",
+      "C. v1 只加文档，UI 二期",
+      "D. v1 在 project-brain-agent 仓内提供独立配置 Web UI"
+    ],
+    "status": "OPEN"
+  }
+]

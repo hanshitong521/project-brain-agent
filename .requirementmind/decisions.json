@@ -1,0 +1,112 @@
+[
+  {
+    "id": "DEC-001",
+    "question_id": "Q-001",
+    "decision": "A — Gate 通过前只产出开发规格与 agent-prompt，不写 Project Brain 业务代码；规格优先于编码，避免架构边界错误。",
+    "topic": "session_deliverable",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["CON-003", "gate.json", "docs/requirementmind/DEVELOPMENT_SPEC.md"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-002",
+    "question_id": "Q-002",
+    "decision": "D — 多仓边界：新建独立 project-brain-agent（brain-server、mcp-server、memory-service、knowledge-service 等）；openhands-agent-canvas 仅 UI/交互/MCP 配置入口，Brain 不得写入 Canvas 仓。",
+    "topic": "code_home",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["CON-001", "AGENTS.md", "Files Forbidden: src/** in agent-canvas for brain services"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-003",
+    "question_id": "Q-003",
+    "decision": "C — 单一 Project Brain MCP 中间层，同时服务 Cursor 与 OpenHands Agent Server（双宿主）。",
+    "topic": "runtime_host",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["mcp-server design", "OpenHands MCP client config"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-004",
+    "question_id": "Q-004",
+    "decision": "A — v1 只消费已发布 openhands-agent-server（uvx/Docker），不 fork、不 vendor SDK，不修改 Agent Loop；未来如需深度集成再考虑 SDK 插件。",
+    "topic": "openhands_source",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["CON-002", "software-agent-sdk ownership"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-005",
+    "question_id": "Q-005",
+    "decision": "A — Downloads/11111 仅作参考；运行时通过 Docker/PyPI 消费官方制品（mem0ai、llama-index、qdrant 容器等），不把第三方源码 vendor 进产品仓。SCIP/Joern/Semgrep 等以独立 CLI 调用，非 v1 必启。",
+    "topic": "third_party_consume",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["docker-compose", "requirements.txt"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-006",
+    "question_id": "Q-006",
+    "decision": "A — v1 最小闭环：project-context + Memory(Mem0+Qdrant) + MCP + Token 预算 + 一条标准 Agent 流程；不含 SCIP/Joern/Evolution/自动 Review/自动测试 Agent。",
+    "topic": "v1_scope",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["repo layout", "mcp tool list v1"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-007",
+    "question_id": "Q-007",
+    "decision": "C（调整）— Mem0 负责经验记忆（历史决策、Bug 经验）；LlamaIndex 负责文档/代码知识/架构资料；Qdrant 为底层向量存储。禁止 Mem0 与 LlamaIndex 写入同一 collection。Collection 命名：memory_experience、knowledge_document、code_index（v1 可空）、skill_index（v1 可空）。",
+    "topic": "memory_stack",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["CON-004", "qdrant collections", "memory-service", "knowledge-service"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-008",
+    "question_id": "Q-008",
+    "decision": "A — v1 验收使用合成 fixture（如 demo-spring-project、demo-python-crawler），不接入淘宝采集/抖音百应/真实 Spring 退款/blender-mind 业务仓。",
+    "topic": "validation_targets",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["tests/fixtures", "Acceptance Criteria"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-009",
+    "question_id": "Q-006",
+    "decision": "v1 显式排除：修改 OpenHands 核心、SCIP、Joern、Skill Evolution、Semgrep 自动 Review、自动测试 Agent、真实业务项目接入。",
+    "topic": "v1_exclusions",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["Out of Scope"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-010",
+    "question_id": "Q-001",
+    "decision": "交付物命名：主 Agent 可读规格为 PROJECT_BRAIN_AGENT_DEVELOPMENT_SPEC.md v3.0（基于真实仓库边界），canonical 编译副本 docs/requirementmind/DEVELOPMENT_SPEC.md。",
+    "topic": "spec_naming",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["docs/requirementmind/DEVELOPMENT_SPEC.md", "PROJECT_BRAIN_AGENT_DEVELOPMENT_SPEC.md"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  },
+  {
+    "id": "DEC-011",
+    "question_id": "Q-006",
+    "decision": "v1 验收三则：T1 退款/设计类问题返回项目规则+历史经验+相关文档；T2 修改 Service 方法走 Memory→上下文→Agent 修改（v1 不要求完整 skill-engine，MCP 可返回固定 demo skill 或空）；T3 检索上下文 ≤5000 token 预算（相对全量 ~30000 token 基线）。",
+    "topic": "v1_acceptance",
+    "source": "USER",
+    "status": "FROZEN",
+    "impact": ["Acceptance Criteria", "token budget tests"],
+    "created_at": "2026-09-03T12:30:00+08:00"
+  }
+]

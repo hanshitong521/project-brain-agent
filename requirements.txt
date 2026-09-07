@@ -1,0 +1,10 @@
+# v1 offline demo (default)
+mcp>=1.6.0,<2
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pyyaml>=6.0
+pydantic>=2.0
+pytest>=8.0
+
+# optional production stack (pip install -r requirements-full.txt)
+# mem0ai llama-index-core qdrant-client ...

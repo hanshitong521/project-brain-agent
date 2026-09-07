@@ -1,0 +1,34 @@
+[
+  {
+    "id": "CON-001",
+    "left": "用户要求在当前工作区按 Project Brain 大纲开发企业级软件工程 OS（含 Memory/RAG/MCP/DB/Agent 循环）。",
+    "right": "AGENTS.md:47 与 docs/architecture.md:14：本仓库只是 Agent Canvas 前端，禁止把 Agent/Tool/业务服务写进这里。",
+    "severity": "BLOCKING",
+    "status": "RESOLVED",
+    "resolution_decision_id": "DEC-002"
+  },
+  {
+    "id": "CON-002",
+    "left": "用户大纲以 OpenHands 为执行基座（Agent Loop/Tool/Workspace），并禁止改核心 Agent 逻辑。",
+    "right": "Downloads/11111 无 OpenHands/SDK 源码；本仓库也无 Agent Loop。基座代码不在扫描范围内。",
+    "severity": "BLOCKING",
+    "status": "RESOLVED",
+    "resolution_decision_id": "DEC-004"
+  },
+  {
+    "id": "CON-003",
+    "left": "用户要求“按照这个开发文档开发一下这个项目”。",
+    "right": "RequirementMind R1 / SKILL.md:11：未过 Requirement Gate 不允许正式写业务代码。",
+    "severity": "BLOCKING",
+    "status": "RESOLVED",
+    "resolution_decision_id": "DEC-001"
+  },
+  {
+    "id": "CON-004",
+    "left": "用户大纲把 Mem0、Qdrant、LlamaIndex 并列，并另设计 PostgreSQL memories 表与自研 memory-service。",
+    "right": "mem0-main/pyproject.toml:16 已依赖 qdrant-client + sqlalchemy，与自研 PG+Qdrant+LlamaIndex 记忆栈功能重叠，职责未在代码中存在单一权威实现。",
+    "severity": "IMPORTANT",
+    "status": "RESOLVED",
+    "resolution_decision_id": "DEC-007"
+  }
+]

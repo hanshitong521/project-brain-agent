@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ASM-001",
+    "statement": "用户真正要的第一份交付物是可给后续 Agent 使用的开发规格，而不是立刻改 Agent Canvas 业务代码。",
+    "risk": "MEDIUM",
+    "source": "MODEL_INFERENCE",
+    "status": "CONFIRMED_AS_FACT"
+  },
+  {
+    "id": "ASM-002",
+    "statement": "Downloads/11111 里的 Ruff / OpenRewrite / tree-sitter / SWE-agent 是备选能力，不一定进入 v1。",
+    "risk": "LOW",
+    "source": "MODEL_INFERENCE",
+    "status": "RESOLVED"
+  },
+  {
+    "id": "ASM-003",
+    "statement": "Token 分层数字（L0=500 / max 16000 / 降 70–90%）是目标草案，尚未有基线测量。",
+    "risk": "MEDIUM",
+    "source": "MODEL_INFERENCE",
+    "status": "UNVERIFIED"
+  }
+]
