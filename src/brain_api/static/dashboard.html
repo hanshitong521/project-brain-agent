@@ -640,8 +640,20 @@
       opacity: 0.85;
     }
     #dateApply { font-size: 0.75rem; padding: 0.4rem 0.85rem; }
+    .lessons-quick-list { display: flex; flex-direction: column; gap: 0.45rem; max-height: 320px; overflow: auto; }
+    .lessons-quick-item {
+      padding: 0.55rem 0.65rem; border-radius: 10px; border: 1px solid var(--border);
+      background: rgba(15, 22, 36, 0.6); font-size: 0.82rem;
+    }
+    .lessons-quick-item .lh { font-weight: 600; color: var(--text); margin-bottom: 0.2rem; }
+    .lessons-quick-item .ex { color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+    .lessons-md-preview {
+      margin-top: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 1px solid var(--border);
+      background: #0a0f18; font-family: var(--mono); font-size: 0.72rem; line-height: 1.5;
+      color: #cbd5e1; white-space: pre-wrap; max-height: 240px; overflow: auto;
+    }
   </style>
-  <script src="http://127.0.0.1:18888/hub-nav.js" defer></script>
+  <script src="/hub-nav.js" defer></script>
 </head>
 <body>
   <header>
@@ -650,6 +662,7 @@
       <p class="sub">记忆 · Token 节约 · 上下文组装 · 北京时间</p>
     </div>
     <div class="header-actions">
+      <a href="/lessons" class="ghost" style="text-decoration:none;font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid var(--border)">教训库 MD</a>
       <a href="/mcp-lab" class="ghost" style="text-decoration:none;font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid var(--border)">MCP 实验室</a>
       <div class="field-inline">
         <span>项目</span>
@@ -666,11 +679,27 @@
     <div id="baselineWarn" class="warn" style="display:none"></div>
     <div class="kpi-grid" id="summaryCards"></div>
 
+    <section class="panel" id="lessonsPanel">
+      <div class="panel-head">
+        <div>
+          <h2>教训库</h2>
+          <div class="desc">已晋升 = Agent <code>search</code> / <code>get_change_context</code> 会召回 · 待审 = 需你在下方或 <a href="/lessons">教训库页</a> 晋升/编辑</div>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="ghost" id="lessonsRefreshBtn">刷新教训</button>
+          <a href="/lessons" class="ghost" style="text-decoration:none;padding:0.4rem 0.65rem;border-radius:10px;border:1px solid var(--border)">打开编辑 / MD</a>
+        </div>
+      </div>
+      <div class="panel-body" id="lessonsQuickBody">
+        <p class="hint" style="margin:0">加载中…</p>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="panel-head">
         <div>
           <h2>Token 对比</h2>
-          <div class="desc">全量估算 vs Brain 实际上下文</div>
+          <div class="desc">全量语料估算 vs Brain 实际上下文 · 单位=估算 tok（UTF-8 字符数÷4，中英混合，非 Cursor 账单）</div>
         </div>
       </div>
       <div class="panel-body bar-wrap" id="tokenBars"></div>
@@ -721,7 +750,7 @@
         <div class="stat-row" id="savingsSummaryCards"></div>
         <div class="charts-duo">
           <div class="chart-panel">
-            <div class="chart-panel-title" id="savingsChartHint">累计节约 token</div>
+            <div class="chart-panel-title" id="savingsChartHint">累计节约（估算 tok · 非账单）</div>
             <div class="chart-area plot-scroll" id="savingsChart"></div>
           </div>
           <div class="chart-panel">
@@ -735,10 +764,10 @@
               <tr>
                 <th>北京时间</th>
                 <th>项目</th>
-                <th>节约</th>
-                <th>节约比例</th>
-                <th>上下文</th>
-                <th>全量</th>
+                <th>节约(估)</th>
+                <th>比例</th>
+                <th>上下文(估)</th>
+                <th>全量基线(估)</th>
                 <th>记忆</th>
                 <th>文档</th>
                 <th class="col-task-h">任务说明</th>
@@ -747,15 +776,17 @@
             <tbody id="savingsLedger"></tbody>
           </table>
         </div>
-        <p class="hint" style="font-size:0.72rem;color:var(--muted);margin:0.65rem 0 0">
-          仅统计已配置 <span class="mono">repo_root</span> 的真实项目（不含 demo）。全量 = 仓库 <span class="mono">docs/**</span> + <span class="mono">.cursor/rules/**</span>；节约比例 = 节约 ÷ 全量。
+        <p class="hint" style="font-size:0.72rem;color:var(--muted);margin:0.65rem 0 0;line-height:1.45">
+          仅统计已配置 <span class="mono">repo_root</span> 的真实项目（不含 demo）。<strong>估算 tok</strong> = UTF-8 字符数 ÷ 4（中英混合同公式，非官方 tokenizer，非 Cursor 账单）。<br/>
+          <strong>全量基线</strong> = <span class="mono">docs/**</span> + <span class="mono">.cursor/rules/**</span> 索引语料总字符÷4。<strong>单次节约</strong> = max(0, 全量基线 − 当次上下文)；<strong>累计节约</strong> = 各次相加（MCP 每检索一次计一次，为「相对灌全库」的对比估算）。<br/>
+          <strong>组装</strong> → <span class="mono">context_build</span>（L0+L1+L2）；<strong>MCP</strong> → <span class="mono">context_retrieval</span>（返回 JSON÷4；旧行可能标 <span class="mono">retrieval_backfill</span>）。比例 = 单次节约 ÷ 单次全量基线。
         </p>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-head">
-        <div><h2>经验记忆</h2><div class="desc">JSONL · 查看 / 删除 / 去重</div></div>
+        <div><h2>记忆文件（JSONL）</h2><div class="desc">原始条数 / 去重 · 正文教训见上方「教训库」</div></div>
         <div class="memory-toolbar">
           <label class="auto-dedupe" title="打开看板时若检测到重复行则自动合并">
             <input type="checkbox" id="memoryAutoDedupe" checked />
@@ -769,7 +800,7 @@
         <div class="table-wrap" style="max-height:none">
           <table>
             <thead>
-              <tr><th>项目</th><th>条数</th><th>可去重</th><th>文件</th><th>操作</th><th>更新</th></tr>
+              <tr><th>项目</th><th>条数</th><th>待审</th><th>可去重</th><th>文件</th><th>操作</th><th>更新</th></tr>
             </thead>
             <tbody id="memoryTable"></tbody>
           </table>
@@ -1073,7 +1104,7 @@
         ["组装次数", fmt(s.context_build_count), `今日 ${s.today_context_build_count || 0} · 非 Cursor 主路径`],
         ["记忆写入", fmt(s.memory_write_count), `今日 ${s.today_memory_write_count || 0}`],
         ["记忆条数", fmt(s.total_stored_memories), "JSONL"],
-        ["①组装节约", fmt(s.total_saved_tokens), `${s.savings_percent}% · 语料基线非账单`],
+        ["①组装节约", fmt(s.total_saved_tokens), `${s.savings_percent}% · 估 tok(÷4) · 仅 context_build 合计`],
         ["快照", data.server_time_cn?.slice(0, 19) || "—", data.filter_project_id || "全部"],
       ];
       document.getElementById("summaryCards").innerHTML = cards.map(([l, v, h]) =>
@@ -1093,15 +1124,20 @@
       memoryRowsCache = rows || [];
       const tb = document.getElementById("memoryTable");
       updateDedupeButton(rows, summary);
-      if (!rows.length) { tb.innerHTML = "<tr><td colspan='6'>暂无</td></tr>"; return; }
+      if (!rows.length) { tb.innerHTML = "<tr><td colspan='7'>暂无</td></tr>"; return; }
       tb.innerHTML = rows.map((r) => {
         const rem = r.dedupe_removable || 0;
+        const cand = r.candidate_count || 0;
         const dedupeCell = rem > 0
           ? `<span class="dedupe-badge">${rem} 条</span>`
+          : `<span class="dedupe-badge ok">0</span>`;
+        const candCell = cand > 0
+          ? `<span class="dedupe-badge" style="border-color:var(--amber)">${cand}</span>`
           : `<span class="dedupe-badge ok">0</span>`;
         return `<tr>
         <td>${escapeHtml(r.project_id)}${aliasTag(r.project_id)}</td>
         <td>${r.memory_count}</td>
+        <td>${candCell}</td>
         <td>${dedupeCell}</td>
         <td class="mono">${r.file_abs ? fileLink(r.file_abs) : escapeHtml(r.file)}</td>
         <td><button type="button" class="ghost mem-view" data-pid="${escapeHtml(r.project_id)}">查看</button></td>
@@ -1113,25 +1149,53 @@
       const id = it.id || `line-${idx + 1}`;
       const meta = it.metadata || {};
       const kind = meta.kind || it.kind || "experience";
+      const lc = (it.lifecycle || meta.lifecycle || "verified").toLowerCase();
       const title = (it.title || meta.title || "").trim()
         || (it.memory || it.content || "").split("\n")[0].slice(0, 72)
         || id;
       const rep = it.repeat_count > 1 ? `<span class="tag">×${it.repeat_count}</span>` : "";
       const kindTag = `<span class="tag">${escapeHtml(kind)}</span>`;
+      const lcTag = `<span class="tag" title="lifecycle">${escapeHtml(lc)}</span>`;
+      const gf = it.grandfathered ? `<span class="tag" title="存量未取证">legacy</span>` : "";
+      const st = it.status && it.status !== "ok" ? `<span class="tag">${escapeHtml(it.status)}</span>` : "";
+      const av = it.auto_verdict || {};
+      const avTag = av.verdict ? `<span class="tag" title="${escapeHtml((av.reasons||[]).join("; "))}">建议:${escapeHtml(av.verdict)}</span>` : "";
+      const src = it.source || meta.source || "";
       const body = (it.memory || it.content || "");
       const preview = body.length > 280 ? body.slice(0, 280) + "…" : body;
+      const promoteBtns = lc === "candidate"
+        ? `<button type="button" class="btn-modal primary mem-promote" data-id="${escapeHtml(id)}" data-pid="${escapeHtml(projectId)}">晋升 verified</button>
+           <button type="button" class="btn-modal mem-reject" data-id="${escapeHtml(id)}" data-pid="${escapeHtml(projectId)}">驳回</button>`
+        : "";
       return `<div class="memory-modal-item" data-id="${escapeHtml(id)}">
           <div class="meta">
             <strong style="color:var(--text);font-size:0.88rem">${escapeHtml(title)}</strong>
-            ${kindTag}${rep}
+            ${lcTag}${kindTag}${avTag}${gf}${st}${rep}
             <span class="mono" style="opacity:0.7">${escapeHtml(String(id).slice(0, 8))}…</span>
-            <span>${escapeHtml(it.created_cn || it.last_seen_cn || "")}</span>
+            <span>${escapeHtml(src)} · ${escapeHtml(it.created_cn || it.last_seen_cn || "")}</span>
           </div>
           <div class="text">${escapeHtml(preview)}</div>
           <div class="modal-actions" style="margin-top:0.5rem;margin-bottom:0">
+            ${promoteBtns}
+            <button type="button" class="btn-modal mem-edit" data-id="${escapeHtml(id)}" data-pid="${escapeHtml(projectId)}">编辑</button>
             <button type="button" class="btn-modal danger mem-del" data-id="${escapeHtml(id)}" data-pid="${escapeHtml(projectId)}">删除</button>
           </div>
         </div>`;
+    }
+
+    async function memoryLifecycleAction(projectId, memoryId, action) {
+      const path = action === "promote" ? "promote" : "reject";
+      const r = await fetch(
+        `/v1/memory/${encodeURIComponent(projectId)}/${encodeURIComponent(memoryId)}/${path}`,
+        { method: "POST" },
+      );
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showToast(body.detail || `${action} 失败`, "warn");
+        return false;
+      }
+      showToast(action === "promote" ? "已晋升 verified" : "已驳回");
+      return true;
     }
 
     async function loadMemories(projectId) {
@@ -1175,6 +1239,27 @@
         footer.querySelector("#memModalDedupe")?.addEventListener("click", () => runDedupe(projectId, rem, { skipConfirm: true }));
         document.getElementById("modalBody").querySelectorAll(".mem-del").forEach((b) => {
           b.addEventListener("click", () => confirmDeleteMemory(b.dataset.pid, b.dataset.id, items));
+        });
+        document.getElementById("modalBody").querySelectorAll(".mem-edit").forEach((b) => {
+          b.addEventListener("click", () => {
+            window.open(`/lessons?project_id=${encodeURIComponent(b.dataset.pid)}`, "_blank");
+          });
+        });
+        document.getElementById("modalBody").querySelectorAll(".mem-promote").forEach((b) => {
+          b.addEventListener("click", async () => {
+            if (await memoryLifecycleAction(b.dataset.pid, b.dataset.id, "promote")) {
+              await loadMemories(projectId);
+              pollOnce().catch(() => {});
+            }
+          });
+        });
+        document.getElementById("modalBody").querySelectorAll(".mem-reject").forEach((b) => {
+          b.addEventListener("click", async () => {
+            if (await memoryLifecycleAction(b.dataset.pid, b.dataset.id, "reject")) {
+              await loadMemories(projectId);
+              pollOnce().catch(() => {});
+            }
+          });
         });
       } catch (e) {
         document.getElementById("modalBody").innerHTML = `<p style="color:var(--red)">${escapeHtml(String(e))}</p>`;
@@ -1353,12 +1438,15 @@
     }
 
     function renderSavingsSummary(s) {
-      const src = s.hit_source === "retrieval" ? "口径=MCP检索" : (s.hit_source === "build" ? "口径=组装" : "");
+      const src = s.hit_source === "retrieval" ? "口径=MCP检索累计" : (s.hit_source === "build" ? "口径=组装累计" : "");
+      const savedSub = s.hit_source === "retrieval"
+        ? "估 tok · 各次(全量−MCP返回)相加"
+        : (s.build_count ? "估 tok · 各次(全量−L0L1L2)相加" : "无组装/MCP 明细");
       const tiles = [
-        ["组装", s.build_count, "次"],
-        ["MCP 检索", s.retrieval_count ?? 0, "次"],
-        ["累计节约", fmt(s.total_saved), "tok"],
-        ["平均节约比例", (s.avg_savings_percent ?? 0) + "%", "节约÷全量"],
+        ["组装", s.build_count, "次 · context_build"],
+        ["MCP 检索", s.retrieval_count ?? 0, "次 · context_retrieval"],
+        ["累计节约", fmt(s.total_saved), savedSub],
+        ["平均节约比例", (s.avg_savings_percent ?? 0) + "%", "单次节约÷单次全量基线"],
         ["任一命中", (s.any_hit_rate ?? 0) + "%", src || "记忆或文档"],
         ["记忆命中", (s.memory_hit_rate ?? 0) + "%", ""],
         ["文档命中", (s.knowledge_hit_rate ?? 0) + "%", ""],
@@ -1374,7 +1462,7 @@
       const hint = document.getElementById("savingsChartHint");
       const hasBuildTok = series.some((b) => (b.saved_tokens || 0) > 0 || (b.usage_tokens || 0) > 0);
       hint.textContent = hasBuildTok
-        ? `按${periodLabel[savingsPeriod] || "日"}：绿=节约 tok · 蓝=实际上下文`
+        ? `按${periodLabel[savingsPeriod] || "日"}：绿=节约(估 tok) · 蓝=实际上下文(估)`
         : `按${periodLabel[savingsPeriod] || "日"}：无组装时展示 MCP 检索命中（柱高=次数）`;
       if (!series.length) {
         el.innerHTML = '<div class="chart-empty">暂无 context_build / MCP 检索数据</div>';
@@ -1471,9 +1559,14 @@
         tb.innerHTML = "<tr><td colspan='9'>无记录（仅显示已配置 repo_root 的项目；demo 已排除）</td></tr>";
         return;
       }
+      const modeTag = (r) => {
+        const m = r.savings_mode;
+        if (!m || m === "retrieval_est") return "";
+        return ` <span class="tag" title="savings_mode">${escapeHtml(String(m))}</span>`;
+      };
       tb.innerHTML = rows.slice(0, 120).map((r) => `<tr>
         <td class="mono">${(r.timestamp_cn || "").slice(0, 19)}</td>
-        <td>${r.project_id || "—"} <span class="tag">${r._kind}</span></td>
+        <td>${r.project_id || "—"} <span class="tag">${r._kind}</span>${modeTag(r)}</td>
         <td class="mono" style="color:var(--green)">${fmt(r.saved_tokens || 0)}</td>
         <td class="mono" style="color:var(--green)">${r.savings_percent ?? 0}%</td>
         <td class="mono">${r.usage_tokens || 0}</td>
@@ -1529,7 +1622,7 @@
           return;
         }
         showToast(`${pid}: 更新 ${data.updated ?? 0}/${data.total ?? 0} 条标题`, "ok");
-        connect();
+        pollOnce().catch(() => {});
       } catch (e) {
         showToast(String(e), "warn");
       }
@@ -1658,11 +1751,68 @@
 
     document.getElementById("aliasRefresh").addEventListener("click", () => loadAliases());
 
+    function lessonsProjectId() {
+      return filterProject || (memoryRowsCache[0] && memoryRowsCache[0].project_id) || "shejiuPro";
+    }
+
+    function renderLessonsQuick(items, markdown, pid) {
+      const el = document.getElementById("lessonsQuickBody");
+      if (!el) return;
+      const verified = (items || []).filter((it) => (it.lifecycle || "verified") === "verified" || it.grandfathered);
+      const pending = (items || []).filter((it) => it.lifecycle === "candidate");
+      const suggest = pending.filter((it) => (it.auto_verdict || {}).verdict === "promote");
+      let html = `<p class="hint" style="margin:0 0 0.65rem"><strong>${escapeHtml(pid)}</strong> · 已生效 <strong>${verified.length}</strong> 条 · 待审 <strong>${pending.length}</strong> 条`;
+      if (suggest.length) html += ` · 系统建议晋升 <strong>${suggest.length}</strong> 条`;
+      html += `</p>`;
+      if (!items.length) {
+        el.innerHTML = html + `<p class="hint">暂无记录。任务结束用 MCP <code>save_bug_memory</code> / <code>record_task_outcome</code>，再到 <a href="/lessons?project_id=${encodeURIComponent(pid)}">教训库</a> 晋升。</p>`;
+        return;
+      }
+      const row = (it) => {
+        const title = escapeHtml((it.title || (it.memory || "").split("\n")[0]).slice(0, 72));
+        const lc = it.lifecycle || (it.grandfathered ? "verified" : "?");
+        const av = (it.auto_verdict || {}).verdict ? ` · 建议:${it.auto_verdict.verdict}` : "";
+        const leg = it.grandfathered ? " · legacy" : "";
+        const ex = escapeHtml((it.memory || "").replace(/\s+/g, " ").slice(0, 140));
+        return `<div class="lessons-quick-item"><div class="lh"><span class="tag">${escapeHtml(lc)}</span> ${title}${escapeHtml(av)}${escapeHtml(leg)}</div><div class="ex">${ex}</div></div>`;
+      };
+      html += `<div class="lessons-quick-list">`;
+      verified.slice(-12).reverse().forEach((it) => { html += row(it); });
+      pending.slice(0, 6).forEach((it) => { html += row(it); });
+      html += `</div>`;
+      if (markdown) {
+        html += `<div class="lessons-md-preview">${escapeHtml(markdown.slice(0, 4000))}${markdown.length > 4000 ? "\n…" : ""}</div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    async function loadLessonsQuick() {
+      const pid = lessonsProjectId();
+      const el = document.getElementById("lessonsQuickBody");
+      if (!el) return;
+      try {
+        const r = await fetch(`/v1/memory/${encodeURIComponent(pid)}/lessons?limit=120&include_candidates=true`);
+        if (r.status === 404 || r.status === 501) {
+          el.innerHTML = `<p class="warn" style="margin:0">当前看板进程较旧，没有教训 API。请在 <code>project-brain-agent</code> 执行 <code>scripts/start-dashboard-background.ps1</code> 重启后再刷新本页。</p>`;
+          return;
+        }
+        if (!r.ok) {
+          el.innerHTML = `<p class="hint">加载失败 HTTP ${r.status}</p>`;
+          return;
+        }
+        const data = await r.json();
+        renderLessonsQuick(data.items || [], data.markdown || "", pid);
+      } catch (e) {
+        el.innerHTML = `<p class="hint">${escapeHtml(String(e))}</p>`;
+      }
+    }
+
     function applyData(data) {
       renderSummary(data);
       renderMemory(data.memory_by_project || [], data.summary);
       renderEvents(data.recent_events || []);
       loadSavings();
+      loadLessonsQuick();
       maybeAutoDedupe(data.memory_by_project || [], data.summary).catch(() => {});
       document.getElementById("refreshLabel").textContent = data.server_time_cn?.slice(11, 19) || "ok";
       document.getElementById("statusDot").style.background = "var(--green)";
@@ -1709,6 +1859,8 @@
       connectStream();
       pollOnce().catch(() => {});
     });
+
+    document.getElementById("lessonsRefreshBtn")?.addEventListener("click", () => loadLessonsQuick());
 
     initDateFilters();
 

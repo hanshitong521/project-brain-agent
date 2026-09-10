@@ -18,7 +18,7 @@ cd e:\workA\A-skill\project-brain-agent
 
 看板：http://127.0.0.1:18787/dashboard  
 
-**统一菜单**：先启动 [dev-hub](../dev-hub/README.md)（http://127.0.0.1:18888/），各看板顶栏可互相跳转。
+**看板**：`scripts/start-dashboard-background.ps1` → http://127.0.0.1:18787/dashboard 。ContextMind 看板：`node <shejiuPro>/.cursor/contextmind/dashboard.mjs <shejiuPro> --port 8899`。
 
 停止：`.\scripts\stop-dashboard.ps1`
 

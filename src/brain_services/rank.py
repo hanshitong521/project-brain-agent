@@ -336,7 +336,7 @@ def score_memory(item: dict[str, Any], tokens: list[str], query: str) -> float:
     return score
 
 
-def slim_memory(item: dict[str, Any], *, score: float | None = None, preview: int = 420) -> dict[str, Any]:
+def slim_memory(item: dict[str, Any], *, score: float | None = None, preview: int = 160) -> dict[str, Any]:
     from brain_services.memory_title import derive_memory_title
 
     meta = item.get("metadata") or {}
@@ -347,6 +347,7 @@ def slim_memory(item: dict[str, Any], *, score: float | None = None, preview: in
         "title": title,
         "memory": body[:preview],
         "kind": meta.get("kind", "experience"),
+        "lifecycle": item.get("lifecycle") or meta.get("lifecycle"),
         "importance": item.get("importance"),
         "last_seen_cn": item.get("last_seen_cn"),
         "repeat_count": int(item.get("repeat_count") or 1),
@@ -355,13 +356,13 @@ def slim_memory(item: dict[str, Any], *, score: float | None = None, preview: in
         out["task_id"] = meta["task_id"]
     related = meta.get("related_files") or []
     if related:
-        out["related_files"] = related[:8]
+        out["related_files"] = related[:4]
     if score is not None:
         out["score"] = round(float(score), 2)
     return out
 
 
-def slim_knowledge(hit: dict[str, Any], *, excerpt: int = 360) -> dict[str, Any]:
+def slim_knowledge(hit: dict[str, Any], *, excerpt: int = 120) -> dict[str, Any]:
     text = str(hit.get("text") or "")
     return {
         "source": hit.get("source"),

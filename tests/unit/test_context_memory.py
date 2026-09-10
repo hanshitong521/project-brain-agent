@@ -30,13 +30,14 @@ def test_save_decision_and_search(tmp_path: Path) -> None:
 def test_get_change_context_scores_file(tmp_path: Path) -> None:
     mem = SimpleMemoryStore(tmp_path / "mem")
     svc = ContextMemoryService(mem, ProjectContextService(ROOT / "fixtures"))
-    svc.save_bug(
+    saved = svc.save_bug(
         "shejiuPro",
         "重复领红包",
         problem="锁失效",
         fix="Redis SETNX",
         related_files=["TRedPacketTaskServiceImpl.java"],
     )
+    mem.promote("shejiuPro", saved["id"])
     ctx = svc.get_change_context("shejiuPro", "shejiu-modules/shejiu-product/.../TRedPacketTaskServiceImpl.java")
     assert ctx["change_risk"] == "high"
     assert len(ctx["memories"]) >= 1

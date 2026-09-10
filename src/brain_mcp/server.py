@@ -112,7 +112,7 @@ def record_task_outcome(
 
     pid = _project_id(project_id)
     files = [f.strip() for f in related_files.split(",") if f.strip()] if related_files else []
-    meta: dict = {"kind": "experience"}
+    meta: dict = {"kind": "experience", "lifecycle": "candidate", "source": "agent"}
     if title.strip():
         meta["title"] = title.strip()
     if task_id.strip():

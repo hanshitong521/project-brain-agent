@@ -167,10 +167,24 @@ def memory_store_stats() -> dict[str, Any]:
     total = 0
     total_removable = 0
     if mem_dir.exists():
+        from brain_services.memory_lifecycle import LIFECYCLE_CANDIDATE, effective_lifecycle
+
         for path in sorted(mem_dir.glob("*.jsonl")):
-            count = sum(1 for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip())
+            rows: list[dict[str, Any]] = []
+            for ln in path.read_text(encoding="utf-8").splitlines():
+                if not ln.strip():
+                    continue
+                try:
+                    rows.append(json.loads(ln))
+                except json.JSONDecodeError:
+                    continue
+            count = len(rows)
             total += count
             pid = path.stem
+            cand = sum(1 for r in rows if effective_lifecycle(r) == LIFECYCLE_CANDIDATE)
+            verified = count - cand - sum(
+                1 for r in rows if effective_lifecycle(r) == "rejected"
+            )
             preview = store.dedupe_preview(pid) if hasattr(store, "dedupe_preview") else {}
             removable = int(preview.get("removed") or 0)
             total_removable += removable
@@ -178,6 +192,8 @@ def memory_store_stats() -> dict[str, Any]:
                 {
                     "project_id": pid,
                     "memory_count": count,
+                    "candidate_count": cand,
+                    "verified_count": verified,
                     "dedupe_removable": removable,
                     "dedupe_unique": int(preview.get("kept") or count),
                     "file": str(path.name),

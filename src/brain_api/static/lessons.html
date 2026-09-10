@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>教训库 · Project Brain</title>
+  <style>
+    :root {
+      --bg: #0c1220; --surface: #161e30; --border: rgba(148,163,184,.2);
+      --text: #f1f5f9; --muted: #94a3b8; --accent: #60a5fa; --green: #34d399; --amber: #fbbf24;
+      --mono: ui-monospace, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI","PingFang SC",sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+    header h1 { margin: 0; font-size: 1.15rem; }
+    a { color: var(--accent); }
+    select, button, textarea, input { font: inherit; padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid var(--border); background: #0f1624; color: var(--text); }
+    button { cursor: pointer; background: rgba(96,165,250,.15); }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 64px); }
+    @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    .col { border-right: 1px solid var(--border); overflow: auto; max-height: calc(100vh - 64px); }
+    .col:last-child { border-right: none; }
+    .toolbar { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.85rem; color: var(--muted); }
+    .list { padding: 0.5rem; }
+    .card {
+      border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem 0.75rem; margin-bottom: 0.5rem;
+      cursor: pointer; background: var(--surface);
+    }
+    .card:hover { border-color: var(--accent); }
+    .card.active { outline: 2px solid var(--accent); }
+    .tag { display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 6px; background: rgba(148,163,184,.15); margin-right: 0.25rem; }
+    .tag.promote { background: rgba(52,211,153,.2); color: var(--green); }
+    .tag.review { background: rgba(251,191,36,.2); color: var(--amber); }
+    .md-pane { padding: 1rem; font-size: 0.85rem; line-height: 1.55; white-space: pre-wrap; font-family: var(--mono); color: #cbd5e1; }
+    .edit { padding: 1rem; display: none; }
+    .edit.open { display: block; }
+    textarea { width: 100%; min-height: 200px; resize: vertical; }
+    .field { margin-bottom: 0.65rem; }
+    .field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
+  </style>
+</head>
+<body>
+  <script src="/hub-nav.js" defer></script>
+  <header>
+    <h1>教训库</h1>
+    <span>项目</span>
+    <select id="project"></select>
+    <label><input type="checkbox" id="includeCand" checked /> 含待审</label>
+    <button type="button" id="refresh">刷新</button>
+    <button type="button" id="applyAuto">采纳系统建议（批量晋升）</button>
+      <a href="/">导航</a>
+      <a href="/dashboard">看板</a>
+  </header>
+  <main>
+    <div class="col">
+      <div class="toolbar">点击条目编辑 · 系统建议来自规则引擎（非 LLM）</div>
+      <div class="list" id="list"></div>
+      <div class="edit" id="editPanel">
+        <div class="field"><label>标题</label><input id="editTitle" /></div>
+        <div class="field"><label>正文</label><textarea id="editBody"></textarea></div>
+        <div class="field"><label>适用场景 applies_when（逗号分隔）</label><input id="editApplies" /></div>
+        <div class="field"><label>勿用于 do_not_use_when</label><input id="editAvoid" /></div>
+        <div class="field"><label>人工备注</label><input id="editNote" /></div>
+        <button type="button" id="saveEdit">保存修改</button>
+        <button type="button" class="ghost" id="promoteOne">晋升 verified</button>
+        <button type="button" class="ghost" id="rejectOne">驳回</button>
+      </div>
+    </div>
+    <div class="col">
+      <div class="toolbar">Markdown 预览（可 <a id="mdRaw" href="#" target="_blank">新窗口打开</a>）</div>
+      <div class="md-pane" id="mdPreview"></div>
+    </div>
+  </main>
+  <script>
+    let items = [];
+    let selectedId = "";
+    const qs = new URLSearchParams(location.search);
+    const initialProject = qs.get("project_id") || "shejiuPro";
+
+    async function loadProjects() {
+      const r = await fetch("/v1/projects");
+      const data = await r.json();
+      const sel = document.getElementById("project");
+      (data.project_ids || []).forEach((id) => {
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = id;
+        sel.appendChild(o);
+      });
+      sel.value = initialProject;
+    }
+
+    function verdictTag(av) {
+      if (!av) return "";
+      const v = av.verdict || "review";
+      const cls = v === "promote" ? "promote" : "review";
+      return `<span class="tag ${cls}">${v}</span>`;
+    }
+
+    function renderList() {
+      const el = document.getElementById("list");
+      if (!items.length) { el.innerHTML = "<p style='color:#94a3b8;padding:1rem'>暂无</p>"; return; }
+      el.innerHTML = items.map((it) => {
+        const id = it.id || "";
+        const title = (it.title || (it.memory || "").split("\n")[0]).slice(0, 60);
+        const lc = it.lifecycle || "verified";
+        return `<div class="card ${id === selectedId ? "active" : ""}" data-id="${id}">
+          ${verdictTag(it.auto_verdict)}
+          <span class="tag">${lc}</span>
+          <strong>${title}</strong>
+        </div>`;
+      }).join("");
+      el.querySelectorAll(".card").forEach((c) => {
+        c.addEventListener("click", () => selectItem(c.dataset.id));
+      });
+    }
+
+    function selectItem(id) {
+      selectedId = id;
+      const it = items.find((x) => x.id === id);
+      if (!it) return;
+      document.getElementById("editPanel").classList.add("open");
+      document.getElementById("editTitle").value = it.title || "";
+      document.getElementById("editBody").value = it.memory || it.content || "";
+      const ap = it.applies_when || (it.metadata || {}).applies_when || [];
+      document.getElementById("editApplies").value = ap.join(", ");
+      const av = it.do_not_use_when || (it.metadata || {}).do_not_use_when || [];
+      document.getElementById("editAvoid").value = av.join(", ");
+      document.getElementById("editNote").value = it.human_note || (it.metadata || {}).human_note || "";
+      renderList();
+    }
+
+    async function refresh() {
+      const pid = document.getElementById("project").value;
+      const inc = document.getElementById("includeCand").checked;
+      document.getElementById("mdRaw").href = `/v1/memory/${encodeURIComponent(pid)}/lessons.md?include_candidates=${inc}`;
+      const r = await fetch(`/v1/memory/${encodeURIComponent(pid)}/lessons?include_candidates=${inc}`);
+      const data = await r.json();
+      items = data.items || [];
+      document.getElementById("mdPreview").textContent = data.markdown || "";
+      renderList();
+    }
+
+    document.getElementById("refresh").onclick = refresh;
+    document.getElementById("project").onchange = refresh;
+    document.getElementById("includeCand").onchange = refresh;
+
+    document.getElementById("saveEdit").onclick = async () => {
+      const pid = document.getElementById("project").value;
+      const split = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+      const body = {
+        title: document.getElementById("editTitle").value,
+        memory: document.getElementById("editBody").value,
+        applies_when: split(document.getElementById("editApplies").value),
+        do_not_use_when: split(document.getElementById("editAvoid").value),
+        human_note: document.getElementById("editNote").value,
+      };
+      const r = await fetch(`/v1/memory/${encodeURIComponent(pid)}/${encodeURIComponent(selectedId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { alert("保存失败"); return; }
+      await refresh();
+      selectItem(selectedId);
+    };
+
+    async function lifecycleAction(path) {
+      const pid = document.getElementById("project").value;
+      await fetch(`/v1/memory/${encodeURIComponent(pid)}/${encodeURIComponent(selectedId)}/${path}`, { method: "POST" });
+      await refresh();
+    }
+    document.getElementById("promoteOne").onclick = () => lifecycleAction("promote");
+    document.getElementById("rejectOne").onclick = () => lifecycleAction("reject");
+
+    document.getElementById("applyAuto").onclick = async () => {
+      const pid = document.getElementById("project").value;
+      const r = await fetch(`/v1/memory/${encodeURIComponent(pid)}/apply-auto-promote`, { method: "POST" });
+      const data = await r.json();
+      alert(`已晋升 ${data.count || 0} 条`);
+      await refresh();
+    };
+
+    loadProjects().then(refresh);
+  </script>
+</body>
+</html>

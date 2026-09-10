@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from brain_services.memory_lifecycle import LIFECYCLE_CANDIDATE, LIFECYCLE_VERIFIED, is_searchable
 from brain_services.memory_simple import get_memory_backend
 from brain_services.project_context import ProjectContextService
 from brain_services.rank import (
@@ -96,6 +97,8 @@ class ContextMemoryService:
         body = format_decision(decision, rationale, related)
         meta = {
             "kind": "decision",
+            "lifecycle": LIFECYCLE_VERIFIED,
+            "source": "agent",
             "decision": decision.strip(),
             "rationale": rationale.strip(),
             "related_files": related,
@@ -116,6 +119,8 @@ class ContextMemoryService:
         body = format_bug(title, problem, cause, fix, related)
         meta = {
             "kind": "bug",
+            "lifecycle": LIFECYCLE_CANDIDATE,
+            "source": "agent",
             "title": title.strip(),
             "related_files": related,
         }
@@ -181,7 +186,9 @@ class ContextMemoryService:
         needles = file_path_needles(file)
         basename = _basename_key(file)
         stem = Path(basename).stem
-        items = self._memory.list_all(project_id, limit=500)
+        list_fn = getattr(self._memory, "list_all", None)
+        raw_items = list_fn(project_id, limit=500) if callable(list_fn) else []
+        items = [it for it in raw_items if is_searchable(it)]
         scored: list[tuple[float, dict[str, Any]]] = []
         for item in items:
             s = score_change_memory(item, needles, file)
@@ -228,7 +235,7 @@ class ContextMemoryService:
             risk = "medium"
         rules_snippet = ""
         try:
-            rules_snippet = self._projects.rules_text(project_id)[:600]
+            rules_snippet = self._projects.rules_text(project_id)[:200]
         except KeyError:
             pass
         repo = None

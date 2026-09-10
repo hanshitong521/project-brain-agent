@@ -6,11 +6,34 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from brain_services.memory_auto_review import compute_auto_verdict, should_auto_promote
+from brain_services.memory_lifecycle import (
+    LIFECYCLE_CANDIDATE,
+    LIFECYCLE_REJECTED,
+    LIFECYCLE_VERIFIED,
+    STATUS_CONFLICT,
+    STATUS_OK,
+    default_lifecycle_for_kind,
+    effective_lifecycle,
+    is_searchable,
+    looks_like_secret,
+    normalize_record,
+)
 from brain_services.memory_title import enrich_memory_metadata
 from brain_services.token_analytics import memory_fingerprint, normalize_memory_text
 
 DATA_DIR = Path(__file__).resolve().parents[2] / ".data" / "memories"
 TZ_CN = timezone(timedelta(hours=8))
+
+
+def _enrich_item(item: dict[str, Any]) -> dict[str, Any]:
+    out = normalize_record(item)
+    out["auto_verdict"] = compute_auto_verdict(out)
+    return out
+
+
+def _auto_promote_mode() -> str:
+    return (os.environ.get("BRAIN_AUTO_PROMOTE") or "off").strip().lower()
 
 
 class SimpleMemoryStore:
@@ -43,21 +66,24 @@ class SimpleMemoryStore:
             for item in items:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
+    def _verified_items(self, project_id: str) -> list[dict[str, Any]]:
+        return [it for it in self._read_all(project_id) if is_searchable(it)]
+
     def search(self, project_id: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
         from brain_services.rank import query_tokens, score_memory
 
         limit = min(max(1, limit), 8)
-        items = self._read_all(project_id)
+        items = self._verified_items(project_id)
         tokens = query_tokens(query or "")
         if not (query or "").strip() or not tokens:
-            return items[-limit:]
+            return [_enrich_item(it) for it in items[-limit:]]
         scored: list[tuple[float, dict[str, Any]]] = []
         for item in items:
             s = score_memory(item, tokens, query)
             if s > 0:
                 scored.append((s, item))
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [it for _, it in scored[:limit]]
+        return [_enrich_item(it) for _, it in scored[:limit]]
 
     def add(
         self,
@@ -68,10 +94,23 @@ class SimpleMemoryStore:
     ) -> dict[str, Any]:
         import uuid
 
-        meta_in = enrich_memory_metadata(summary, metadata)
+        if looks_like_secret(summary):
+            return {"rejected": True, "reason": "secret", "id": None}
+
+        meta_in = enrich_memory_metadata(summary, metadata or {})
+        kind = str(meta_in.get("kind") or "experience")
+        lifecycle = str(meta_in.get("lifecycle") or default_lifecycle_for_kind(kind)).lower()
+        if lifecycle not in (LIFECYCLE_CANDIDATE, LIFECYCLE_VERIFIED, LIFECYCLE_REJECTED):
+            lifecycle = default_lifecycle_for_kind(kind)
+        meta_in["lifecycle"] = lifecycle
+        meta_in.setdefault("source", meta_in.get("source") or "agent")
+
         title = str(meta_in.get("title") or "")
         norm = normalize_memory_text(summary)
         fp = memory_fingerprint(summary)
+        explicit_idem = (metadata or {}).get("idempotency_key")
+        if explicit_idem:
+            meta_in["idempotency_key"] = str(explicit_idem)
         decision_key = None
         if meta_in.get("kind") == "decision" and meta_in.get("decision"):
             decision_key = memory_fingerprint(str(meta_in["decision"]))
@@ -80,6 +119,16 @@ class SimpleMemoryStore:
             bug_key = memory_fingerprint(str(meta_in["title"]) + "|" + norm[:200])
         now_cn = datetime.now(TZ_CN).strftime("%Y-%m-%d %H:%M:%S")
         items = self._read_all(project_id)
+        if explicit_idem:
+            for item in reversed(items):
+                if str(item.get("metadata", {}).get("idempotency_key") or "") == str(explicit_idem):
+                    return {
+                        "id": str(item.get("id")),
+                        "title": title,
+                        "deduplicated": True,
+                        "no_op": True,
+                        "lifecycle": effective_lifecycle(item),
+                    }
         for item in reversed(items):
             existing = item.get("memory") or item.get("content") or ""
             meta = item.get("metadata") or {}
@@ -99,6 +148,9 @@ class SimpleMemoryStore:
             )
             if not (same_body or same_decision or same_bug):
                 continue
+            ex_lc = effective_lifecycle(item)
+            if lifecycle == LIFECYCLE_CANDIDATE and ex_lc == LIFECYCLE_VERIFIED:
+                break
             prev_seen = item.get("last_seen_cn")
             skip_event = False
             if prev_seen:
@@ -112,6 +164,8 @@ class SimpleMemoryStore:
             item.setdefault("metadata", {}).update(meta_in)
             item["title"] = title
             item["metadata"]["title"] = title
+            if not item.get("lifecycle"):
+                item["lifecycle"] = lifecycle
             self._write_all(project_id, items)
             if skip_event:
                 return {
@@ -147,19 +201,49 @@ class SimpleMemoryStore:
                 "repeat_count": item["repeat_count"],
             }
 
-        record = {
+        status = STATUS_OK
+        conflicts_with: list[str] = []
+        if lifecycle == LIFECYCLE_CANDIDATE:
+            for v in items:
+                if not is_searchable(v):
+                    continue
+                vbody = v.get("memory") or v.get("content") or ""
+                if memory_fingerprint(vbody) == fp or normalize_memory_text(vbody) == norm:
+                    status = STATUS_CONFLICT
+                    vid = str(v.get("id") or "")
+                    if vid:
+                        conflicts_with.append(vid)
+                    break
+
+        record: dict[str, Any] = {
             "id": str(uuid.uuid4()),
             "title": title,
             "memory": summary.strip(),
             "importance": importance,
             "metadata": meta_in,
             "fingerprint": fp,
+            "lifecycle": lifecycle,
+            "status": status,
+            "source": meta_in.get("source") or "agent",
+            "confidence": 0.5 if lifecycle == LIFECYCLE_CANDIDATE else 0.85,
+            "evidence": list(meta_in.get("evidence") or []),
+            "conflicts_with": conflicts_with,
+            "supersedes": None,
             "created_cn": now_cn,
             "last_seen_cn": now_cn,
+            "verified_at": now_cn if lifecycle == LIFECYCLE_VERIFIED else None,
             "repeat_count": 1,
         }
+        record["auto_verdict"] = compute_auto_verdict(record)
         items.append(record)
         self._write_all(project_id, items)
+        auto_promoted = False
+        mode = _auto_promote_mode()
+        if lifecycle == LIFECYCLE_CANDIDATE and should_auto_promote(record, mode):
+            pr = self.promote(project_id, record["id"])
+            auto_promoted = bool(pr.get("ok"))
+            if auto_promoted:
+                lifecycle = LIFECYCLE_VERIFIED
         try:
             from brain_services.stats_store import record_event
 
@@ -173,6 +257,8 @@ class SimpleMemoryStore:
                     "title": title,
                     "kind": meta_in.get("kind"),
                     "deduplicated": False,
+                    "auto_verdict": record["auto_verdict"].get("verdict"),
+                    "auto_promoted": auto_promoted,
                 },
                 source="memory_store",
             )
@@ -183,6 +269,11 @@ class SimpleMemoryStore:
             "title": title,
             "deduplicated": False,
             "repeat_count": 1,
+            "lifecycle": lifecycle,
+            "status": status,
+            "conflict": status == STATUS_CONFLICT,
+            "auto_verdict": record["auto_verdict"],
+            "auto_promoted": auto_promoted,
         }
 
     def _merge_duplicates(self, items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
@@ -221,8 +312,16 @@ class SimpleMemoryStore:
             self._write_all(project_id, kept)
         return {"kept": len(kept), "removed": removed, "before": len(items)}
 
-    def list_all(self, project_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    def list_all(
+        self,
+        project_id: str,
+        limit: int = 200,
+        lifecycle: str | None = None,
+    ) -> list[dict[str, Any]]:
         items = self._read_all(project_id)
+        if lifecycle:
+            want = lifecycle.strip().lower()
+            items = [it for it in items if effective_lifecycle(it) == want]
         for i, item in enumerate(items):
             if not item.get("id"):
                 item["id"] = f"line-{i + 1}"
@@ -234,7 +333,40 @@ class SimpleMemoryStore:
                 item["title"] = t
             elif not item.get("title") and meta.get("title"):
                 item["title"] = meta["title"]
-        return items[-limit:]
+        return [_enrich_item(it) for it in items[-limit:]]
+
+    def promote(self, project_id: str, memory_id: str) -> dict[str, Any]:
+        items = self._read_all(project_id)
+        now_cn = datetime.now(TZ_CN).strftime("%Y-%m-%d %H:%M:%S")
+        for item in items:
+            if str(item.get("id")) != memory_id:
+                continue
+            if effective_lifecycle(item) != LIFECYCLE_CANDIDATE:
+                return {"ok": False, "error": "not_candidate", "id": memory_id}
+            item["lifecycle"] = LIFECYCLE_VERIFIED
+            item["verified_at"] = now_cn
+            item["confidence"] = max(float(item.get("confidence") or 0), 0.85)
+            if (item.get("status") or STATUS_OK) == STATUS_CONFLICT:
+                item["status"] = STATUS_OK
+            meta = item.setdefault("metadata", {})
+            meta["lifecycle"] = LIFECYCLE_VERIFIED
+            self._write_all(project_id, items)
+            return {"ok": True, "id": memory_id, "lifecycle": LIFECYCLE_VERIFIED}
+        return {"ok": False, "error": "not_found", "id": memory_id}
+
+    def reject(self, project_id: str, memory_id: str) -> dict[str, Any]:
+        items = self._read_all(project_id)
+        for item in items:
+            if str(item.get("id")) != memory_id:
+                continue
+            if effective_lifecycle(item) != LIFECYCLE_CANDIDATE:
+                return {"ok": False, "error": "not_candidate", "id": memory_id}
+            item["lifecycle"] = LIFECYCLE_REJECTED
+            meta = item.setdefault("metadata", {})
+            meta["lifecycle"] = LIFECYCLE_REJECTED
+            self._write_all(project_id, items)
+            return {"ok": True, "id": memory_id, "lifecycle": LIFECYCLE_REJECTED}
+        return {"ok": False, "error": "not_found", "id": memory_id}
 
     def backfill_titles(self, project_id: str) -> dict[str, int]:
         """Persist Phoenix-style display names + harvested related_files onto JSONL rows."""
@@ -269,6 +401,55 @@ class SimpleMemoryStore:
             "updated": updated,
             "related_files_updated": related_updated,
         }
+
+    def get_by_id(self, project_id: str, memory_id: str) -> dict[str, Any] | None:
+        for item in self._read_all(project_id):
+            if str(item.get("id")) == memory_id:
+                return _enrich_item(item)
+        return None
+
+    def update_by_id(
+        self,
+        project_id: str,
+        memory_id: str,
+        *,
+        memory: str | None = None,
+        title: str | None = None,
+        applies_when: list[str] | None = None,
+        do_not_use_when: list[str] | None = None,
+        human_note: str | None = None,
+        importance: str | None = None,
+    ) -> dict[str, Any]:
+        items = self._read_all(project_id)
+        now_cn = datetime.now(TZ_CN).strftime("%Y-%m-%d %H:%M:%S")
+        for item in items:
+            if str(item.get("id")) != memory_id:
+                continue
+            if memory is not None:
+                if looks_like_secret(memory):
+                    return {"ok": False, "error": "secret"}
+                item["memory"] = memory.strip()
+                item["fingerprint"] = memory_fingerprint(memory)
+            if title is not None:
+                item["title"] = title.strip()
+                item.setdefault("metadata", {})["title"] = title.strip()
+            meta = item.setdefault("metadata", {})
+            if applies_when is not None:
+                item["applies_when"] = applies_when
+                meta["applies_when"] = applies_when
+            if do_not_use_when is not None:
+                item["do_not_use_when"] = do_not_use_when
+                meta["do_not_use_when"] = do_not_use_when
+            if human_note is not None:
+                item["human_note"] = human_note.strip()
+                meta["human_note"] = human_note.strip()
+            if importance is not None:
+                item["importance"] = importance
+            item["edited_cn"] = now_cn
+            item["auto_verdict"] = compute_auto_verdict(item)
+            self._write_all(project_id, items)
+            return {"ok": True, "id": memory_id, "item": _enrich_item(item)}
+        return {"ok": False, "error": "not_found", "id": memory_id}
 
     def delete_by_id(self, project_id: str, memory_id: str) -> bool:
         items = self._read_all(project_id)

@@ -4,10 +4,11 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from brain_services.context_builder import ContextBuilder
@@ -65,6 +66,25 @@ class BuildContextBody(BaseModel):
 
 class RulesBody(BaseModel):
     rules: list[str]
+
+
+class MemoryPatchBody(BaseModel):
+    memory: str | None = Field(default=None, max_length=12000)
+    title: str | None = Field(default=None, max_length=300)
+    applies_when: list[str] | None = None
+    do_not_use_when: list[str] | None = None
+    human_note: str | None = Field(default=None, max_length=2000)
+    importance: str | None = None
+
+
+class MemoryCandidateBody(BaseModel):
+    summary: str = Field(min_length=1, max_length=8000)
+    importance: str = "medium"
+    title: str = ""
+    task_id: str = ""
+    idempotency_key: str = ""
+    source: str = "testmind"
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class McpAnnotateBody(BaseModel):
@@ -154,8 +174,19 @@ class AliasesBody(BaseModel):
 
 
 @app.get("/")
-def root_redirect():
-    return RedirectResponse(url="/dashboard", status_code=302)
+def root_nav_page() -> FileResponse:
+    path = _STATIC / "index.html"
+    if not path.exists():
+        return RedirectResponse(url="/dashboard", status_code=302)
+    return FileResponse(path, media_type="text/html; charset=utf-8")
+
+
+@app.get("/hub-nav.js")
+def hub_nav_js() -> FileResponse:
+    path = _STATIC / "hub-nav.js"
+    if not path.exists():
+        raise HTTPException(404, "hub-nav.js not found")
+    return FileResponse(path, media_type="application/javascript; charset=utf-8")
 
 
 @app.get("/health")
@@ -171,6 +202,14 @@ def dashboard_page() -> FileResponse:
     return FileResponse(path, media_type="text/html; charset=utf-8")
 
 
+@app.get("/lessons")
+def lessons_page() -> FileResponse:
+    path = _STATIC / "lessons.html"
+    if not path.exists():
+        raise HTTPException(404, "lessons not found")
+    return FileResponse(path, media_type="text/html; charset=utf-8")
+
+
 @app.get("/mcp-lab")
 def mcp_lab_page() -> FileResponse:
     path = _STATIC / "mcp-lab.html"
@@ -181,10 +220,25 @@ def mcp_lab_page() -> FileResponse:
 
 @app.get("/api/nav")
 def api_nav() -> dict:
+    from brain_services.data_root import brain_data_root
+
     nex = os.environ.get("NEXMIND_WEB_URL", "").strip()
+    port = os.environ.get("BRAIN_API_PORT", "18787")
+    ctx_dash = os.environ.get("CONTEXTMIND_DASHBOARD_URL", "http://127.0.0.1:8899").strip()
+    ctx_lab = os.environ.get("CONTEXTMIND_PROMPT_LAB_URL", "http://127.0.0.1:8898").strip()
+    try:
+        data_root = str(brain_data_root())
+    except Exception:
+        data_root = ""
     return {
+        "home": "/",
         "dashboard": "/dashboard",
+        "lessons": "/lessons",
         "mcp_lab": "/mcp-lab",
+        "brain_api": f"http://127.0.0.1:{port}",
+        "brain_data_root": data_root,
+        "contextmind_dashboard": ctx_dash or None,
+        "contextmind_prompt_lab": ctx_lab or None,
         "nexmind_mcp_lab_query": f"{nex.rstrip('/')}/?view=mcpLab" if nex else None,
     }
 
@@ -439,6 +493,43 @@ def memory_backfill_titles(project_id: str) -> dict:
     return {"project_id": pid, "requested_project_id": project_id, **backfill_fn(pid)}
 
 
+@app.get("/v1/memory/{project_id}/lessons")
+def memory_lessons_json(
+    project_id: str,
+    limit: int = 300,
+    include_candidates: bool = Query(default=True),
+) -> dict:
+    from brain_services.lessons_markdown import render_lessons_markdown
+
+    list_fn = getattr(_memory, "list_all", None)
+    if not callable(list_fn):
+        raise HTTPException(501, "lessons 需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    items = list_fn(pid, limit=limit)
+    if not include_candidates:
+        from brain_services.memory_lifecycle import LIFECYCLE_VERIFIED, effective_lifecycle
+
+        items = [it for it in items if effective_lifecycle(it) == LIFECYCLE_VERIFIED]
+    md = render_lessons_markdown(pid, items, include_candidates=include_candidates)
+    return {
+        "project_id": pid,
+        "requested_project_id": project_id,
+        "count": len(items),
+        "markdown": md,
+        "items": items,
+    }
+
+
+@app.get("/v1/memory/{project_id}/lessons.md")
+def memory_lessons_md(
+    project_id: str,
+    limit: int = 300,
+    include_candidates: bool = Query(default=True),
+) -> PlainTextResponse:
+    body = memory_lessons_json(project_id, limit=limit, include_candidates=include_candidates)
+    return PlainTextResponse(content=body["markdown"], media_type="text/markdown; charset=utf-8")
+
+
 @app.get("/v1/stats/retrieval")
 def stats_retrieval(
     project_id: str | None = Query(default=None),
@@ -464,7 +555,11 @@ def stats_retrieval(
 
 
 @app.get("/v1/memory/{project_id}")
-def memory_list(project_id: str, limit: int = 200) -> dict:
+def memory_list(
+    project_id: str,
+    limit: int = 200,
+    lifecycle: str | None = Query(default=None, description="candidate|verified|rejected"),
+) -> dict:
     list_fn = getattr(_memory, "list_all", None)
     if not callable(list_fn):
         raise HTTPException(
@@ -475,8 +570,134 @@ def memory_list(project_id: str, limit: int = 200) -> dict:
     return {
         "project_id": pid,
         "requested_project_id": project_id,
-        "items": list_fn(pid, limit=limit),
+        "lifecycle_filter": lifecycle,
+        "items": list_fn(pid, limit=limit, lifecycle=lifecycle),
     }
+
+
+@app.post("/v1/memory/{project_id}/candidate")
+def memory_add_candidate(project_id: str, body: MemoryCandidateBody) -> dict:
+    add_fn = getattr(_memory, "add", None)
+    if not callable(add_fn):
+        raise HTTPException(501, "candidate 需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    meta: dict[str, Any] = {
+        "kind": "experience",
+        "lifecycle": "candidate",
+        "source": body.source or "testmind",
+    }
+    if body.title.strip():
+        meta["title"] = body.title.strip()
+    if body.task_id.strip():
+        meta["task_id"] = body.task_id.strip()
+    if body.idempotency_key.strip():
+        meta["idempotency_key"] = body.idempotency_key.strip()
+    if body.evidence:
+        meta["evidence"] = body.evidence
+    out = add_fn(pid, body.summary, importance=body.importance, metadata=meta)
+    if out.get("rejected"):
+        raise HTTPException(400, f"rejected: {out.get('reason')}")
+    record_event(
+        "memory_store",
+        project_id=pid,
+        detail=(body.title or body.summary)[:200],
+        metrics={"lifecycle": "candidate", "memory_id": out.get("id"), "source": meta["source"]},
+        source="api",
+    )
+    return {"project_id": pid, "requested_project_id": project_id, **out}
+
+
+@app.post("/v1/memory/{project_id}/{memory_id}/promote")
+def memory_promote(project_id: str, memory_id: str) -> dict:
+    promote_fn = getattr(_memory, "promote", None)
+    if not callable(promote_fn):
+        raise HTTPException(501, "promote 需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    out = promote_fn(pid, memory_id)
+    if not out.get("ok"):
+        code = 404 if out.get("error") == "not_found" else 400
+        raise HTTPException(code, out.get("error") or "promote failed")
+    record_event(
+        "memory_promote",
+        project_id=pid,
+        detail=memory_id[:36],
+        metrics={"memory_id": memory_id},
+        source="dashboard",
+    )
+    return {"project_id": pid, "requested_project_id": project_id, **out}
+
+
+@app.post("/v1/memory/{project_id}/{memory_id}/reject")
+def memory_reject(project_id: str, memory_id: str) -> dict:
+    reject_fn = getattr(_memory, "reject", None)
+    if not callable(reject_fn):
+        raise HTTPException(501, "reject 需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    out = reject_fn(pid, memory_id)
+    if not out.get("ok"):
+        code = 404 if out.get("error") == "not_found" else 400
+        raise HTTPException(code, out.get("error") or "reject failed")
+    record_event(
+        "memory_reject",
+        project_id=pid,
+        detail=memory_id[:36],
+        metrics={"memory_id": memory_id},
+        source="dashboard",
+    )
+    return {"project_id": pid, "requested_project_id": project_id, **out}
+
+
+@app.patch("/v1/memory/{project_id}/{memory_id}")
+def memory_patch(project_id: str, memory_id: str, body: MemoryPatchBody) -> dict:
+    update_fn = getattr(_memory, "update_by_id", None)
+    if not callable(update_fn):
+        raise HTTPException(501, "edit 需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    out = update_fn(
+        pid,
+        memory_id,
+        memory=body.memory,
+        title=body.title,
+        applies_when=body.applies_when,
+        do_not_use_when=body.do_not_use_when,
+        human_note=body.human_note,
+        importance=body.importance,
+    )
+    if not out.get("ok"):
+        if out.get("error") == "secret":
+            raise HTTPException(400, "rejected: secret")
+        raise HTTPException(404, out.get("error") or "not found")
+    record_event(
+        "memory_edit",
+        project_id=pid,
+        detail=memory_id[:36],
+        metrics={"memory_id": memory_id},
+        source="dashboard",
+    )
+    return {"project_id": pid, "requested_project_id": project_id, **out}
+
+
+@app.post("/v1/memory/{project_id}/apply-auto-promote")
+def memory_apply_auto_promote(project_id: str) -> dict:
+    """Promote all candidates where rule engine verdict == promote."""
+    from brain_services.memory_auto_review import VERDICT_PROMOTE
+
+    list_fn = getattr(_memory, "list_all", None)
+    promote_fn = getattr(_memory, "promote", None)
+    if not callable(list_fn) or not callable(promote_fn):
+        raise HTTPException(501, "需要离线 JSONL 模式")
+    pid = _pid(project_id)
+    promoted: list[str] = []
+    for it in list_fn(pid, limit=500, lifecycle="candidate"):
+        av = it.get("auto_verdict") or {}
+        if av.get("verdict") != VERDICT_PROMOTE:
+            continue
+        if (it.get("status") or "ok") == "conflict":
+            continue
+        pr = promote_fn(pid, str(it.get("id")))
+        if pr.get("ok"):
+            promoted.append(str(it.get("id")))
+    return {"project_id": pid, "promoted_ids": promoted, "count": len(promoted)}
 
 
 @app.delete("/v1/memory/{project_id}/{memory_id}")
