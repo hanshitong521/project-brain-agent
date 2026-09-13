@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from brain_core.token_budget import estimate_tokens
+from brain_services.token_budget import estimate_tokens
 from brain_services.project_context import FIXTURES_ROOT, ProjectContextService
 from brain_services.rank import excerpt_paragraphs, query_tokens, score_document
 

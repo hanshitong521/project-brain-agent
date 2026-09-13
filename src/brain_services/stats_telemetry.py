@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from brain_core.token_budget import estimate_tokens
+from brain_services.token_budget import estimate_tokens
 
 _LOG_DIR = Path(__file__).resolve().parents[2] / ".data" / "stats"
 _LOG_FILE = _LOG_DIR / "brain_stats.log"

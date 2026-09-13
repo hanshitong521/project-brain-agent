@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -19,8 +20,9 @@ from brain_services.project_alias import resolve as resolve_alias
 from brain_services.project_alias import save as save_aliases
 from brain_services.project_alias import status as alias_status
 from brain_services.project_context import FIXTURES_ROOT, ProjectContextService
-from brain_services.stats_filter import filter_events_for_dashboard, filter_memory_projects
 from brain_services.stats_store import (
+    filter_events_for_dashboard,
+    filter_memory_projects,
     build_dashboard_payload,
     get_event_by_id,
     load_events,
@@ -48,14 +50,36 @@ from brain_services.token_analytics import (
 
 _STATIC = Path(__file__).resolve().parent / "static"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_BRAIN_API_PORT = "18787"
 
-app = FastAPI(title="Project Brain API", version="0.1.0")
+
+def _brain_api_port() -> str:
+    return os.environ.get("BRAIN_API_PORT", DEFAULT_BRAIN_API_PORT)
+
+
+def _mount_project_brain_mcp(app: FastAPI) -> None:
+    """Streamable HTTP MCP on /mcp — same uvicorn as dashboard (S4)."""
+    from brain_mcp.server import mcp
+
+    for route in mcp.streamable_http_app().routes:
+        app.router.routes.append(route)
+
+
+@asynccontextmanager
+async def _brain_lifespan(app: FastAPI):
+    from brain_mcp.server import mcp
+
+    _mount_project_brain_mcp(app)
+    async with mcp.session_manager.run():
+        record_event("system", detail="Brain API + MCP 进程启动", source="brain_api")
+        yield
+
+
+app = FastAPI(title="Project Brain API", version="0.1.0", lifespan=_brain_lifespan)
 _projects = ProjectContextService()
 _ctx = ContextBuilder()
 _memory = get_memory_backend()
 _knowledge = KnowledgeService(projects=_projects)
-
-record_event("system", detail="Brain API 进程启动", source="brain_api")
 
 
 class BuildContextBody(BaseModel):
@@ -223,7 +247,7 @@ def api_nav() -> dict:
     from brain_services.data_root import brain_data_root
 
     nex = os.environ.get("NEXMIND_WEB_URL", "").strip()
-    port = os.environ.get("BRAIN_API_PORT", "18787")
+    port = _brain_api_port()
     ctx_dash = os.environ.get("CONTEXTMIND_DASHBOARD_URL", "http://127.0.0.1:8899").strip()
     ctx_lab = os.environ.get("CONTEXTMIND_PROMPT_LAB_URL", "http://127.0.0.1:8898").strip()
     try:
@@ -748,7 +772,7 @@ def knowledge_search(project_id: str, query: str, top_k: int = 5) -> dict:
 def main() -> None:
     import uvicorn
 
-    port = int(os.environ.get("BRAIN_API_PORT", "18787"))
+    port = int(_brain_api_port())
     uvicorn.run("brain_api.app:app", host="127.0.0.1", port=port, reload=False)
 
 

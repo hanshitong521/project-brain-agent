@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from brain_core.token_budget import DEFAULT_BUDGET
+from brain_services.token_budget import DEFAULT_BUDGET
 from brain_services.knowledge_service import KnowledgeService
 from brain_services.memory_simple import get_memory_backend
 from brain_services.project_context import ProjectContextService

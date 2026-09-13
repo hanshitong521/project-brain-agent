@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from brain_services.project_context import ProjectContextService
+from brain_services.project_context import FIXTURES_ROOT, ProjectContextService
 
 SNAPSHOT_REL = Path(".contextmind") / "cache-ledger.json"
 
@@ -33,7 +33,10 @@ def resolve_cache_ledger_path(project_id: str | None) -> Path | None:
     if not root:
         return None
     path = root / SNAPSHOT_REL
-    return path if path.is_file() else None
+    if path.is_file():
+        return path
+    fixture = FIXTURES_ROOT / project_id / SNAPSHOT_REL
+    return fixture if fixture.is_file() else None
 
 
 def load_contextmind_cache_ledger(project_id: str | None = None) -> dict[str, Any] | None:

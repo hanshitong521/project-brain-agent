@@ -45,6 +45,19 @@ def is_searchable(item: dict[str, Any]) -> bool:
     return True
 
 
+def is_change_context_eligible(item: dict[str, Any]) -> bool:
+    """Path-scoped change hints: verified search pool + candidate bug/decision rows."""
+    if (item.get("status") or STATUS_OK) == STATUS_SUPERSEDED:
+        return False
+    if is_searchable(item):
+        return True
+    meta = item.get("metadata") or {}
+    kind = str(meta.get("kind") or item.get("kind") or "experience")
+    if effective_lifecycle(item) == LIFECYCLE_CANDIDATE and kind in ("bug", "decision"):
+        return True
+    return False
+
+
 def default_lifecycle_for_kind(kind: str | None) -> str:
     if kind == "decision":
         return LIFECYCLE_VERIFIED

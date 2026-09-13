@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from brain_core.token_budget import estimate_tokens, DEFAULT_BUDGET
+from brain_services.token_budget import estimate_tokens, DEFAULT_BUDGET
 
 
 def test_truncate_respects_max() -> None:

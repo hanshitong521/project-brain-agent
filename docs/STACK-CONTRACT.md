@@ -71,7 +71,7 @@
 
 
 
-改文件前：`get_change_context(file=…)`（仅 verified + 相关文档）。
+改文件前：`get_change_context(file=…)`（**verified** 记忆 + 路径相关的 **candidate** bug/decision + 相关文档）。
 
 
 

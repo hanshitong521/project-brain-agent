@@ -140,6 +140,15 @@ def record_task_outcome(
 
 
 def main() -> None:
+    import os
+
+    transport = os.environ.get("BRAIN_MCP_TRANSPORT", "stdio").strip().lower()
+    if transport in ("streamable-http", "http"):
+        port = int(os.environ.get("BRAIN_API_PORT", "18787"))
+        mcp.settings.host = "127.0.0.1"
+        mcp.settings.port = port
+        mcp.run(transport="streamable-http")
+        return
     mcp.run(transport="stdio")
 
 

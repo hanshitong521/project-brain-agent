@@ -29,16 +29,17 @@ gates.push(
 	}),
 );
 
-const b1 = spawnSync(py, ["-m", "pytest", "tests/unit/test_session_rank.py", "-q"], {
-	cwd: ROOT,
-	encoding: "utf8",
-});
+const b1 = spawnSync(
+	py,
+	["-m", "pytest", "tests/unit/test_sync_requirementmind.py::test_backfill_tags_only_matching_session_frozen", "-q"],
+	{ cwd: ROOT, encoding: "utf8" },
+);
 gates.push(
 	gateEnvelope({
 		gate_id: "B1",
 		component: "brain",
 		status: (b1.status ?? 1) === 0 ? "PASS" : "FAIL",
-		summary: "session DEC rank unit test",
+		summary: "rm_decision_id backfill unit test",
 		commit,
 	}),
 );
@@ -48,7 +49,7 @@ gates.push(
 		gate_id: "B2",
 		component: "brain",
 		status: existsSync(join(ROOT, "src/brain_services/session_scope.py")) ? "PASS" : "FAIL",
-		summary: "rm_session / task_id ranking scope",
+		summary: "decision_id_from_item scope helper",
 		commit,
 	}),
 );
@@ -57,8 +58,8 @@ gates.push(
 	gateEnvelope({
 		gate_id: "B3",
 		component: "brain",
-		status: existsSync(join(ROOT, "src/brain_services/contextmind_telemetry_bridge.py")) ? "PASS" : "FAIL",
-		summary: "Brain MCP → ContextMind telemetry.db",
+		status: existsSync(join(ROOT, "src/brain_services/mcp_telemetry_bridge.py")) ? "PASS" : "FAIL",
+		summary: "MCP server inference for activity journal",
 		commit,
 	}),
 );

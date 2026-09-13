@@ -132,8 +132,7 @@ def test_backfill_tags_only_matching_session_frozen(tmp_path: Path) -> None:
             "task_id": "DECISION",
         },
     )
-    sys.path.insert(0, str(ROOT / "scripts"))
-    from backfill_rm_decision_tags import backfill_tags, load_frozen_decisions
+    from brain_services.rm_decision_tags import backfill_tags, load_frozen_decisions
 
     session_id, frozen = load_frozen_decisions(rm)
     stats = backfill_tags(mem, "shejiuPro", session_id, frozen)

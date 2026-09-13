@@ -6,5 +6,4 @@ pyyaml>=6.0
 pydantic>=2.0
 pytest>=8.0
 
-# optional production stack (pip install -r requirements-full.txt)
-# mem0ai llama-index-core qdrant-client ...
+# optional Mem0 vector path (pip install -r requirements-full.txt)

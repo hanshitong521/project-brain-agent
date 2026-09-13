@@ -8,7 +8,7 @@
 ## 安装（Windows，已实测）
 
 ```powershell
-cd e:\workA\A-skill\project-brain-agent
+cd e:\workA\A-skill\A-github-skill-mcp\project-brain-agent
 .\scripts\install-and-demo.ps1
 ```
 
@@ -48,13 +48,18 @@ Docker 未启动时走 **离线模式**（JSONL 记忆 + fixture 文档），不
 
 ## 可选：Qdrant + Mem0
 
+默认走 JSONL + fixture，**不必**装 Mem0。若要试向量记忆：
+
 1. 启动 Docker Desktop，然后：`docker compose up -d`
-2. 设置环境变量并安装 Mem0 路径：
+2. 安装可选依赖并设置环境变量：
 
 ```powershell
+.\.venv\Scripts\python -m pip install -r requirements-full.txt
 $env:BRAIN_USE_MEM0="1"
 $env:OPENAI_API_KEY="sk-..."
 ```
+
+看板 list/promote/dedupe 仍需 JSONL 模式（勿设 `BRAIN_USE_MEM0=1`）。
 
 ## MCP（Cursor）
 
@@ -65,10 +70,10 @@ $env:OPENAI_API_KEY="sk-..."
   "mcpServers": {
     "project-brain": {
       "type": "stdio",
-      "command": "e:\\workA\\A-skill\\project-brain-agent\\.venv\\Scripts\\python.exe",
+      "command": "e:\\workA\\A-skill\\A-github-skill-mcp\\project-brain-agent\\.venv\\Scripts\\python.exe",
       "args": ["-u", "-m", "brain_mcp.server"],
       "env": {
-        "PYTHONPATH": "e:\\workA\\A-skill\\project-brain-agent\\src",
+        "PYTHONPATH": "e:\\workA\\A-skill\\A-github-skill-mcp\\project-brain-agent\\src",
         "PYTHONUTF8": "1"
       }
     }
@@ -85,7 +90,7 @@ $env:OPENAI_API_KEY="sk-..."
 双击或在 PowerShell 执行：
 
 ```powershell
-cd e:\workA\A-skill\project-brain-agent
+cd e:\workA\A-skill\A-github-skill-mcp\project-brain-agent
 .\scripts\start-dashboard-background.ps1
 ```
 

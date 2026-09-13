@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from brain_services.memory_lifecycle import LIFECYCLE_CANDIDATE, LIFECYCLE_VERIFIED, is_searchable
+from brain_services.memory_lifecycle import (
+    LIFECYCLE_CANDIDATE,
+    LIFECYCLE_VERIFIED,
+    is_change_context_eligible,
+    is_searchable,
+)
 from brain_services.memory_simple import get_memory_backend
 from brain_services.project_context import ProjectContextService
 from brain_services.rank import (
@@ -13,6 +18,9 @@ from brain_services.rank import (
     slim_knowledge,
     slim_memory,
 )
+
+from brain_services.session_scope import decision_id_from_item
+
 
 MEMORY_KINDS = frozenset({"experience", "decision", "bug"})
 
@@ -92,18 +100,54 @@ class ContextMemoryService:
         rationale: str = "",
         related_files: list[str] | None = None,
         importance: str = "high",
+        *,
+        rm_decision_id: str | None = None,
+        rm_session: str | None = None,
     ) -> dict[str, Any]:
         related = _merge_related(related_files, decision, rationale)
         body = format_decision(decision, rationale, related)
         meta = {
             "kind": "decision",
             "lifecycle": LIFECYCLE_VERIFIED,
-            "source": "agent",
+            "source": "requirementmind" if rm_decision_id else "agent",
             "decision": decision.strip(),
             "rationale": rationale.strip(),
             "related_files": related,
         }
+        if rm_decision_id:
+            meta["rm_decision_id"] = str(rm_decision_id).strip()
+        if rm_session:
+            meta["rm_session"] = str(rm_session).strip()
         return self._memory.add(project_id, body, importance=importance, metadata=meta)
+
+    def revoke_scoped_rm_decisions(
+        self,
+        project_id: str,
+        rm_session: str,
+        active_decision_ids: set[str] | list[str] | frozenset[str],
+    ) -> dict[str, Any]:
+        """Remove verified RM-tagged decisions in session that are no longer FROZEN."""
+        active = {str(x).strip() for x in active_decision_ids if str(x).strip()}
+        session = str(rm_session or "").strip()
+        list_fn = getattr(self._memory, "list_all", None)
+        if not callable(list_fn) or not session:
+            return {"removed": 0, "revoked_ids": []}
+        raw_items = list_fn(project_id, limit=500)
+        revoked: list[str] = []
+        delete_fn = getattr(self._memory, "delete_by_id", None)
+        if not callable(delete_fn):
+            return {"removed": 0, "revoked_ids": []}
+        for item in raw_items:
+            meta = item.get("metadata") or {}
+            if str(meta.get("rm_session") or "").strip() != session:
+                continue
+            did = str(meta.get("rm_decision_id") or decision_id_from_item(item) or "").strip()
+            if not did or did in active:
+                continue
+            mid = str(item.get("id") or "")
+            if mid and delete_fn(project_id, mid):
+                revoked.append(did)
+        return {"removed": len(revoked), "revoked_ids": revoked}
 
     def save_bug(
         self,
@@ -188,7 +232,7 @@ class ContextMemoryService:
         stem = Path(basename).stem
         list_fn = getattr(self._memory, "list_all", None)
         raw_items = list_fn(project_id, limit=500) if callable(list_fn) else []
-        items = [it for it in raw_items if is_searchable(it)]
+        items = [it for it in raw_items if is_change_context_eligible(it)]
         scored: list[tuple[float, dict[str, Any]]] = []
         for item in items:
             s = score_change_memory(item, needles, file)

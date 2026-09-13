@@ -1,4 +1,4 @@
-"""Read/write .forgemind MCP activity journal (same contract as ContextMind mcp-activity-api.mjs)."""
+"""Read/write .forgemind MCP activity journal for the Brain dashboard."""
 
 from __future__ import annotations
 
