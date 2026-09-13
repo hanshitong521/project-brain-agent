@@ -1,0 +1,10 @@
+{
+  "schema": "contextmind-cache-ledger/v1",
+  "project_id": "shejiuPro",
+  "generated_at": "2026-09-11T00:00:00+08:00",
+  "totals": {
+    "prevented_read_tokens": 0,
+    "tool_emitted_savings": 0,
+    "proxy_llm_savings": 0
+  }
+}
